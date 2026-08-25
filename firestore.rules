@@ -1,0 +1,183 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────
+// O Firestore NEGA tudo que não estiver liberado explicitamente aqui.
+// Não existe regra curinga permissiva neste arquivo, e não deve passar
+// a existir: uma única `match /{doc=**} { allow read: if true }` anula
+// todo o resto, porque as regras se combinam por OU.
+//
+// Duas ameaças mandam neste desenho:
+//   1. alguém enviar pedido em nome de uma unidade que não é a sua
+//   2. alguém ler o orçamento de unidades que não deveria ver
+//
+// Papel, unidadeId e regionalId vêm de custom claims do Firebase Auth —
+// não de documento — para não gastar uma leitura a cada regra.
+// ─────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Identidade ────────────────────────────────────────────────
+    function logado() {
+      return request.auth != null;
+    }
+    function claims() {
+      return request.auth.token;
+    }
+    function papel() {
+      return logado() ? claims().get('papel', '') : '';
+    }
+    function minhaUnidade() {
+      return claims().get('unidadeId', '');
+    }
+    function minhaRegional() {
+      return claims().get('regionalId', '');
+    }
+    function ehAdmin() {
+      return papel() == 'admin';
+    }
+    function ehRegional() {
+      return papel() == 'gestor_regional';
+    }
+    function ehGestor() {
+      return papel() == 'gestor_unidade';
+    }
+    function ehLeitura() {
+      return papel() == 'leitura';
+    }
+    function papelConhecido() {
+      return ehAdmin() || ehRegional() || ehGestor() || ehLeitura();
+    }
+
+    // ── Escopo ────────────────────────────────────────────────────
+    function daMinhaUnidade(dados) {
+      return ehGestor() && dados.unidadeId == minhaUnidade();
+    }
+    function daMinhaRegional(dados) {
+      return ehRegional() && dados.regionalId == minhaRegional();
+    }
+
+    // ── Catálogo: todos leem, só o admin escreve ──────────────────
+    match /ciclos/{cicloId} {
+      allow read: if papelConhecido();
+      allow write: if ehAdmin();
+    }
+
+    match /regionais/{regionalId} {
+      allow read: if papelConhecido();
+      allow write: if ehAdmin();
+    }
+
+    match /unidades/{unidadeId} {
+      allow read: if papelConhecido();
+      allow write: if ehAdmin();
+    }
+
+    match /fornecedores/{fornecedorId} {
+      allow read: if papelConhecido();
+      allow write: if ehAdmin();
+    }
+
+    match /produtos/{produtoId} {
+      // O filtro do que cada regional vê é feito pelas regras de
+      // habilitação, não escondendo o catálogo: preço e descrição não
+      // são segredo dentro da rede.
+      allow read: if papelConhecido();
+      allow write: if ehAdmin();
+
+      match /regras/{regraId} {
+        allow read: if papelConhecido();
+        allow write: if ehAdmin();
+      }
+    }
+
+    // ── Previsão de alunos ────────────────────────────────────────
+    match /matriculas/{matriculaId} {
+      allow read: if ehAdmin()
+                  || ehLeitura()
+                  || daMinhaUnidade(resource.data)
+                  || daMinhaRegional(resource.data);
+
+      // O gestor só escreve a previsão da própria unidade, e o documento
+      // não pode trocar de dono no meio do caminho.
+      allow create: if ehAdmin()
+                    || (ehGestor()
+                        && request.resource.data.unidadeId == minhaUnidade()
+                        && request.resource.data.regionalId == minhaRegional());
+      allow update: if ehAdmin()
+                    || (daMinhaUnidade(resource.data)
+                        && request.resource.data.unidadeId == resource.data.unidadeId
+                        && request.resource.data.regionalId == resource.data.regionalId);
+      allow delete: if ehAdmin();
+    }
+
+    // ── Pedido ────────────────────────────────────────────────────
+    function pedido(pedidoId) {
+      return get(/databases/$(database)/documents/pedidos/$(pedidoId)).data;
+    }
+    function podeLerPedido(dados) {
+      return ehAdmin() || ehLeitura() || daMinhaUnidade(dados) || daMinhaRegional(dados);
+    }
+    function meuPedidoEditavel(pedidoId) {
+      let p = pedido(pedidoId);
+      return ehGestor()
+             && p.unidadeId == minhaUnidade()
+             && (p.estado == 'rascunho' || p.estado == 'devolvido');
+    }
+
+    match /pedidos/{pedidoId} {
+      allow read: if podeLerPedido(resource.data);
+
+      // Abrir o próprio rascunho é a única escrita que o cliente faz no
+      // documento do pedido, e ela não move dinheiro nem estado: o gestor
+      // só cria um pedido vazio, da própria unidade, em rascunho.
+      //
+      // Enviar, devolver, aprovar e reprovar continuam sendo Cloud
+      // Function — é lá que os totais são recalculados sobre o preço do
+      // catálogo, o preço é congelado no item e a transição de estado é
+      // validada. Nenhum total que o cliente escreva chega a valer.
+      allow create: if ehGestor()
+                    && pedidoId == request.resource.data.cicloId + '_' + minhaUnidade()
+                    && request.resource.data.unidadeId == minhaUnidade()
+                    && request.resource.data.regionalId == minhaRegional()
+                    && request.resource.data.estado == 'rascunho'
+                    && request.resource.data.versao == 1
+                    && request.resource.data.totais.obrigatorio == 0
+                    && request.resource.data.totais.opcional == 0
+                    && request.resource.data.totais.total == 0;
+      allow update, delete: if false;
+
+      match /itens/{itemId} {
+        allow read: if podeLerPedido(pedido(pedidoId));
+
+        // O gestor monta os itens no rascunho. Os valores que ele grava
+        // aqui são provisórios: o envio recalcula tudo no servidor.
+        allow create, update, delete: if meuPedidoEditavel(pedidoId);
+      }
+
+      match /eventos/{eventoId} {
+        allow read: if podeLerPedido(pedido(pedidoId));
+        allow write: if false; // trilha só cresce, e só pelo servidor
+      }
+    }
+
+    // ── Convites (links de acesso) ────────────────────────────────
+    // Contêm o hash do token. Nunca legíveis nem graváveis pelo cliente,
+    // nem pelo admin: quem cria e valida é a Cloud Function.
+    match /convites/{conviteId} {
+      allow read, write: if false;
+    }
+
+    // ── Usuários ──────────────────────────────────────────────────
+    match /usuarios/{uid} {
+      // Cada um lê o próprio cadastro; admin e regional leem para montar
+      // as listas de gestores.
+      allow read: if ehAdmin()
+                  || (logado() && request.auth.uid == uid)
+                  || (ehRegional() && resource.data.regionalId == minhaRegional());
+      // Papel e vínculo definem permissão — só mudam pelo servidor, que
+      // também atualiza os custom claims.
+      allow write: if false;
+    }
+  }
+}

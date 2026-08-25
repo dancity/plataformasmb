@@ -1,0 +1,180 @@
+/* ────────────────────────────────────────────────────────────────
+   MODO ESCURO — por inversão de variável, nunca por `dark:` em cada
+   elemento. No Tailwind v4 toda utilitária de cor sai como
+   var(--color-*); redefinir as variáveis aqui vira o app inteiro e
+   faz toda tela nova já nascer com os dois temas.
+
+   Importado DEPOIS de index.css no main.tsx.
+   ──────────────────────────────────────────────────────────────── */
+
+.dark {
+  /* Neutros de UI — o espelho do bloco :root */
+  --ui-bg: #1c1c1c;
+  --ui-surface: #292929;
+  --ui-border: #3a3a3a;
+  --ui-border-strong: #4a4a4a;
+  --ui-text: #ebebeb;
+  --ui-text-muted: #ababab;
+  --ui-text-faint: #9a9a9a;
+
+  /* Status: fundo escuro da mesma cor + texto claro. */
+  --status-ok-bg: oklch(32% 0.07 150);
+  --status-ok-text: oklch(89% 0.06 150);
+  --status-warn-bg: oklch(32% 0.07 95);
+  --status-warn-text: oklch(89% 0.06 95);
+  --status-danger-bg: oklch(32% 0.07 25);
+  --status-danger-text: oklch(89% 0.06 25);
+  --status-done-bg: oklch(32% 0.07 256);
+  --status-done-text: oklch(89% 0.06 256);
+  --status-neutral-bg: #2e2e2e;
+  --status-neutral-text: #c4c4c4;
+
+  /* Os dots são SINAL, não superfície: ficam como no claro. */
+
+  /* Escala de cinza do Tailwind ao contrário — cinza NEUTRO (sem croma). */
+  --color-gray-50: #242424;
+  --color-gray-100: #2e2e2e;
+  --color-gray-200: #3a3a3a;
+  --color-gray-300: #4a4a4a;
+  --color-gray-400: #9a9a9a;
+  --color-gray-500: #ababab;
+  --color-gray-600: #c4c4c4;
+  --color-gray-700: #d8d8d8;
+  --color-gray-800: #e8e8e8;
+  --color-gray-900: #f3f3f3;
+
+  /* Acentos: trocam só as PONTAS (50–300 ↔ 900–600).
+     400/500 ficam intactos porque são sinal. */
+  --color-blue-50: oklch(27% 0.05 256);
+  --color-blue-100: oklch(32% 0.07 256);
+  --color-blue-200: oklch(38% 0.09 256);
+  --color-blue-300: oklch(46% 0.11 256);
+  --color-blue-600: oklch(78% 0.11 256);
+  --color-blue-700: oklch(84% 0.09 256);
+  --color-blue-800: oklch(89% 0.06 256);
+  --color-blue-900: oklch(93% 0.04 256);
+
+  --color-green-50: oklch(27% 0.05 150);
+  --color-green-100: oklch(32% 0.07 150);
+  --color-green-200: oklch(38% 0.09 150);
+  --color-green-300: oklch(46% 0.11 150);
+  --color-green-600: oklch(78% 0.11 150);
+  --color-green-700: oklch(84% 0.09 150);
+  --color-green-800: oklch(89% 0.06 150);
+  --color-green-900: oklch(93% 0.04 150);
+
+  --color-amber-50: oklch(27% 0.05 75);
+  --color-amber-100: oklch(32% 0.07 75);
+  --color-amber-200: oklch(38% 0.09 75);
+  --color-amber-300: oklch(46% 0.11 75);
+  --color-amber-600: oklch(78% 0.11 75);
+  --color-amber-700: oklch(84% 0.09 75);
+  --color-amber-800: oklch(89% 0.06 75);
+  --color-amber-900: oklch(93% 0.04 75);
+
+  --color-yellow-50: oklch(27% 0.05 95);
+  --color-yellow-100: oklch(32% 0.07 95);
+  --color-yellow-200: oklch(38% 0.09 95);
+  --color-yellow-300: oklch(46% 0.11 95);
+  --color-yellow-600: oklch(78% 0.11 95);
+  --color-yellow-700: oklch(84% 0.09 95);
+  --color-yellow-800: oklch(89% 0.06 95);
+  --color-yellow-900: oklch(93% 0.04 95);
+
+  --color-red-50: oklch(27% 0.05 25);
+  --color-red-100: oklch(32% 0.07 25);
+  --color-red-200: oklch(38% 0.09 25);
+  --color-red-300: oklch(46% 0.11 25);
+  --color-red-600: oklch(78% 0.11 25);
+  --color-red-700: oklch(84% 0.09 25);
+  --color-red-800: oklch(89% 0.06 25);
+  --color-red-900: oklch(93% 0.04 25);
+
+  --color-orange-50: oklch(27% 0.05 55);
+  --color-orange-100: oklch(32% 0.07 55);
+  --color-orange-200: oklch(38% 0.09 55);
+  --color-orange-300: oklch(46% 0.11 55);
+  --color-orange-600: oklch(78% 0.11 55);
+  --color-orange-700: oklch(84% 0.09 55);
+  --color-orange-800: oklch(89% 0.06 55);
+  --color-orange-900: oklch(93% 0.04 55);
+
+  --color-violet-50: oklch(27% 0.05 295);
+  --color-violet-100: oklch(32% 0.07 295);
+  --color-violet-200: oklch(38% 0.09 295);
+  --color-violet-300: oklch(46% 0.11 295);
+  --color-violet-600: oklch(78% 0.11 295);
+  --color-violet-700: oklch(84% 0.09 295);
+  --color-violet-800: oklch(89% 0.06 295);
+  --color-violet-900: oklch(93% 0.04 295);
+
+  --color-teal-50: oklch(27% 0.05 185);
+  --color-teal-100: oklch(32% 0.07 185);
+  --color-teal-200: oklch(38% 0.09 185);
+  --color-teal-300: oklch(46% 0.11 185);
+  --color-teal-600: oklch(78% 0.11 185);
+  --color-teal-700: oklch(84% 0.09 185);
+  --color-teal-800: oklch(89% 0.06 185);
+  --color-teal-900: oklch(93% 0.04 185);
+
+  /* A marca institucional é escura demais para virar texto no escuro. */
+  --color-brand: #7fb4e4;
+  --color-brand-medium: #6e9be0;
+}
+
+/* ── EXCEÇÕES QUE A INVERSÃO NÃO COBRE ───────────────────────── */
+
+/* `--color-white` NÃO é invertida: serve de superfície (bg-white) e de
+   texto sobre a marca (text-white). Só o fundo muda, por seletor. */
+.dark .bg-white {
+  background-color: var(--ui-surface);
+}
+
+/* Botão SÓLIDO de perigo: com a inversão, red-600 vira claro e o texto
+   branco some nele. Só o FUNDO volta a escurecer. */
+.dark .bg-red-600 {
+  background-color: oklch(52% 0.19 25);
+}
+.dark .hover\:bg-red-700:hover {
+  background-color: oklch(46% 0.19 25);
+}
+
+/* A cor de ação sólida precisa do mesmo tratamento: brand-medium claro
+   com texto branco em cima seria ilegível. */
+.dark .bg-brand-medium {
+  background-color: #2f4f8a;
+}
+.dark .hover\:bg-brand:hover {
+  background-color: #24406f;
+}
+.dark .bg-brand {
+  background-color: #24406f;
+}
+
+/* Sombra cinza some sobre fundo escuro — escurecer devolve a elevação. */
+.dark .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.35);
+}
+.dark .shadow-md {
+  box-shadow:
+    0 4px 8px -2px rgb(0 0 0 / 0.45),
+    0 2px 4px -2px rgb(0 0 0 / 0.35);
+}
+.dark .shadow-lg {
+  box-shadow:
+    0 10px 18px -4px rgb(0 0 0 / 0.5),
+    0 4px 8px -4px rgb(0 0 0 / 0.4);
+}
+.dark .shadow-xl {
+  box-shadow:
+    0 18px 30px -8px rgb(0 0 0 / 0.55),
+    0 8px 12px -6px rgb(0 0 0 / 0.45);
+}
+.dark .shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.7);
+}
+
+/* Fotos em brilho cheio brigam com a interface escura ao redor. */
+.dark img {
+  filter: brightness(0.88);
+}

@@ -1,0 +1,34 @@
+{
+  "name": "app-interesse-plataformas",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "emu": "firebase emulators:start --only auth,firestore,functions,hosting",
+    "deploy": "npm run build && firebase deploy",
+    "test": "vitest run test/preco.test.ts",
+    "test:regras": "firebase emulators:exec --only firestore \"vitest run test/regras.test.ts\"",
+    "test:tudo": "npm run test && npm run test:regras"
+  },
+  "dependencies": {
+    "firebase": "^12.18.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.7"
+  }
+}

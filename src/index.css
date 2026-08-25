@@ -1,0 +1,90 @@
+@import 'tailwindcss';
+
+/* ────────────────────────────────────────────────────────────────
+   DESIGN TOKENS — base: App Gestão DSE (Marista Brasil).
+   Trocar a seção MARCA muda a identidade sem tocar em componente.
+   ──────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* ── MARCA ─────────────────────────────────────────────────── */
+  --color-brand: #1c3a5b; /* institucional — headers, texto de destaque */
+  --color-brand-medium: #3e64a9; /* ação — botões primários, links, foco */
+  --color-brand-light: #4390cb; /* gradientes, hover claro */
+
+  --color-accent-1: #aec476; /* menta */
+  --color-accent-2: #7552cc; /* violeta */
+  --color-accent-3: #f48924; /* tangerina — obrigatório */
+  --color-accent-4: #f85a40; /* pôr do sol */
+  --color-accent-5: #0cb9c1; /* turquesa */
+  --color-accent-6: #ffc845; /* amarelo */
+
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  /* ── ESCALAS ───────────────────────────────────────────────── */
+  --radius-card: 1rem; /* rounded-2xl — cards, modais, painéis */
+  --radius-control: 0.5rem; /* rounded-lg — botões, inputs, chips */
+  --radius-pill: 9999px; /* rounded-full — badges, avatares, dots */
+
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-card-hover: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-modal: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+
+/* ── ESTADOS SEMÂNTICOS ────────────────────────────────────────
+   Independentes da marca. O par "fundo claro + texto escuro" é o
+   que sobrevive à inversão do modo escuro. */
+:root {
+  --status-ok-bg: #dcfce7;
+  --status-ok-text: #166534;
+  --status-warn-bg: #fef9c3;
+  --status-warn-text: #854d0e;
+  --status-danger-bg: #fee2e2;
+  --status-danger-text: #991b1b;
+  --status-done-bg: #dbeafe;
+  --status-done-text: #1e40af;
+  --status-neutral-bg: #f3f4f6;
+  --status-neutral-text: #4b5563;
+
+  --status-ok-dot: #22c55e;
+  --status-warn-dot: #eab308;
+  --status-danger-dot: #ef4444;
+  --status-done-dot: #3b82f6;
+  --status-neutral-dot: #9ca3af;
+
+  --ui-bg: #f8fafc;
+  --ui-surface: #ffffff;
+  --ui-border: #e5e7eb;
+  --ui-border-strong: #d1d5db;
+  --ui-text: #1e293b;
+  --ui-text-muted: #6b7280;
+  --ui-text-faint: #9ca3af;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Foco visível em tudo que recebe teclado — nunca remover sem substituir. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-medium);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
