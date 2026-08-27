@@ -91,12 +91,28 @@ service cloud.firestore {
       }
     }
 
+    // Consulta por collectionGroup (resolver a habilitação de todas as
+    // soluções de uma vez, sem uma leitura por produto): a regra aninhada
+    // acima cobre a subcoleção sob um produto específico, mas o Firestore
+    // não estende regra aninhada para collectionGroup — precisa desta,
+    // à parte, com o caminho em curinga.
+    match /{caminho=**}/regras/{regraId} {
+      allow read: if papelConhecido();
+    }
+
     // ── Previsão de alunos ────────────────────────────────────────
     match /matriculas/{matriculaId} {
-      allow read: if ehAdmin()
-                  || ehLeitura()
-                  || daMinhaUnidade(resource.data)
-                  || daMinhaRegional(resource.data);
+      // Documento pode não existir ainda — toda unidade começa sem
+      // previsão salva. Sem `resource` (null), não há dado de dono para
+      // checar contra `resource.data`; como não existe orçamento nenhum
+      // para proteger num documento que não existe, basta ter papel
+      // reconhecido, igual à leitura do catálogo.
+      allow read: if resource == null
+                  ? papelConhecido()
+                  : (ehAdmin()
+                     || ehLeitura()
+                     || daMinhaUnidade(resource.data)
+                     || daMinhaRegional(resource.data));
 
       // O gestor só escreve a previsão da própria unidade, e o documento
       // não pode trocar de dono no meio do caminho.
@@ -126,7 +142,12 @@ service cloud.firestore {
     }
 
     match /pedidos/{pedidoId} {
-      allow read: if podeLerPedido(resource.data);
+      // Documento pode não existir ainda — nenhuma unidade nasce com
+      // rascunho aberto. Sem `resource` (null), não há dado de dono para
+      // checar; como não existe orçamento nenhum para proteger num
+      // documento que não existe, basta ter papel reconhecido, igual à
+      // leitura do catálogo.
+      allow read: if resource == null ? papelConhecido() : podeLerPedido(resource.data);
 
       // Abrir o próprio rascunho é a única escrita que o cliente faz no
       // documento do pedido, e ela não move dinheiro nem estado: o gestor

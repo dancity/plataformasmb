@@ -4,7 +4,16 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  collectionGroup,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
@@ -99,6 +108,10 @@ beforeEach(async () => {
     await setDoc(doc(bd, 'convites', 'cv1'), { tokenHash: 'abc', unidadeId: BOA_VIAGEM });
     await setDoc(doc(bd, 'usuarios', 'u_gestor'), {
       email: 'g@x.com', papel: 'gestor_unidade', unidadeId: BOA_VIAGEM, regionalId: RECIFE,
+    });
+
+    await setDoc(doc(bd, 'produtos', 'p1', 'regras', `${RECIFE}_EF1`), {
+      produtoId: 'p1', regionalId: RECIFE, anoEscolar: 'EF1', obrigatoriedade: 'obrigatorio',
     });
   });
 });
@@ -306,5 +319,44 @@ describe('segredos e privilégios', () => {
     await assertSucceeds(
       setDoc(doc(administrador(), 'produtos', 'p9'), { nome: 'Robótica', cicloId: 'c2027' }),
     );
+  });
+});
+
+// Regressão: carregarContexto() lê matrícula e pedido antes de qualquer um
+// dos dois existir (toda unidade começa assim) e resolve a habilitação com
+// uma consulta collectionGroup em vez de uma leitura por produto. As duas
+// coisas já derrubaram o fluxo inteiro do gestor em produção sem que
+// nenhum teste aqui pegasse — ver `firestore.rules`.
+describe('primeira visita da unidade — documento ainda não existe', () => {
+  it('gestor lê a própria matrícula antes dela existir', async () => {
+    await assertSucceeds(getDoc(doc(gestorBoaViagem(), 'matriculas', `c2029_${BOA_VIAGEM}`)));
+  });
+
+  it('gestor lê o próprio pedido antes dele existir', async () => {
+    await assertSucceeds(getDoc(doc(gestorBoaViagem(), 'pedidos', `c2029_${BOA_VIAGEM}`)));
+  });
+
+  it('regional também lê matrícula e pedido inexistentes', async () => {
+    await assertSucceeds(getDoc(doc(regionalRecife(), 'matriculas', `c2029_${BOA_VIAGEM}`)));
+    await assertSucceeds(getDoc(doc(regionalRecife(), 'pedidos', `c2029_${BOA_VIAGEM}`)));
+  });
+
+  it('quem não tem papel continua sem ler nada, exista ou não o documento', async () => {
+    await assertFails(getDoc(doc(semClaims(), 'matriculas', `c2029_${BOA_VIAGEM}`)));
+    await assertFails(getDoc(doc(semClaims(), 'pedidos', `c2029_${BOA_VIAGEM}`)));
+    await assertFails(getDoc(doc(deslogado(), 'matriculas', `c2029_${BOA_VIAGEM}`)));
+  });
+});
+
+describe('regras de habilitação por collectionGroup', () => {
+  it('gestor resolve a habilitação de todas as soluções numa consulta só', async () => {
+    await assertSucceeds(
+      getDocs(query(collectionGroup(gestorBoaViagem(), 'regras'), where('regionalId', '==', RECIFE))),
+    );
+  });
+
+  it('quem não tem papel não lê regras por collectionGroup', async () => {
+    await assertFails(getDocs(collectionGroup(semClaims(), 'regras')));
+    await assertFails(getDocs(collectionGroup(deslogado(), 'regras')));
   });
 });
