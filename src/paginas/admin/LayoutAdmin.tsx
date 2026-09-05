@@ -23,6 +23,7 @@ const ABAS = [
   { para: '/admin/solucoes', rotulo: 'Soluções', fim: false },
   { para: '/admin/fornecedores', rotulo: 'Fornecedores', fim: false },
   { para: '/admin/unidades', rotulo: 'Unidades', fim: false },
+  { para: '/admin/usuarios', rotulo: 'Usuários', fim: false },
 ];
 
 export function LayoutAdmin() {

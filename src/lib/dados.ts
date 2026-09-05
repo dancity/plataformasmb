@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getCountFromServer,
   getDocs,
@@ -176,6 +177,10 @@ export async function criarFornecedor(dados: {
     ...(dados.contatoEmail?.trim() ? { contatoEmail: dados.contatoEmail.trim() } : {}),
   });
   return ref.id;
+}
+
+export async function excluirFornecedor(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'fornecedores', id));
 }
 
 // ─── Produtos ────────────────────────────────────────────────────

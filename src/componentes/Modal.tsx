@@ -31,6 +31,14 @@ export function Modal({
   const idTitulo = useId();
   const caixa = useRef<HTMLDivElement>(null);
 
+  // Focar só quando o diálogo abre — nunca a cada re-render. `aoFechar` quase
+  // sempre chega como closure nova a cada digitação no formulário do pai; se
+  // o foco dependesse dela, cada tecla roubava o foco do campo de volta para
+  // esta caixa, e era preciso clicar de novo para continuar digitando.
+  useEffect(() => {
+    if (aberto) caixa.current?.focus();
+  }, [aberto]);
+
   useEffect(() => {
     if (!aberto) return;
     const aoTeclar = (e: KeyboardEvent) => {
@@ -39,7 +47,6 @@ export function Modal({
     document.addEventListener('keydown', aoTeclar);
     const anterior = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    caixa.current?.focus();
     return () => {
       document.removeEventListener('keydown', aoTeclar);
       document.body.style.overflow = anterior;

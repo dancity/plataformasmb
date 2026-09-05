@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Modal } from '@/componentes/Modal';
+import { DialogoConfirmacao, Modal } from '@/componentes/Modal';
 import {
   Botao,
   Campo,
@@ -8,7 +8,7 @@ import {
   EsqueletoLinhas,
   EstadoVazio,
 } from '@/componentes/ui';
-import { criarFornecedor, listarFornecedores } from '@/lib/dados';
+import { criarFornecedor, excluirFornecedor, listarFornecedores } from '@/lib/dados';
 import type { Fornecedor } from '@dominio/tipos';
 
 export function Fornecedores() {
@@ -20,6 +20,8 @@ export function Fornecedores() {
   const [nome, setNome] = useState('');
   const [cnpj, setCnpj] = useState('');
   const [contatoEmail, setContatoEmail] = useState('');
+  const [excluindo, setExcluindo] = useState<Fornecedor | null>(null);
+  const [apagando, setApagando] = useState(false);
 
   const carregar = useCallback(async () => {
     try {
@@ -85,7 +87,12 @@ export function Fornecedores() {
         <div className="grid gap-3 sm:grid-cols-2">
           {fornecedores.map((f) => (
             <Cartao key={f.id} className="gap-1 p-4">
-              <span className="font-medium text-gray-700">{f.nome}</span>
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-medium text-gray-700">{f.nome}</span>
+                <Botao variante="fantasma" tamanho="sm" onClick={() => setExcluindo(f)}>
+                  Excluir
+                </Botao>
+              </div>
               {f.cnpj && <span className="font-mono text-xs text-gray-500">{f.cnpj}</span>}
               {f.contatoEmail && <span className="text-xs text-gray-500">{f.contatoEmail}</span>}
             </Cartao>
@@ -127,6 +134,27 @@ export function Fornecedores() {
           </p>
         )}
       </Modal>
+
+      <DialogoConfirmacao
+        aberto={!!excluindo}
+        nivel="medio"
+        titulo="Excluir fornecedor"
+        descricao="Soluções que já apontam para este fornecedor passam a mostrar “—” no lugar do nome — elas não são excluídas nem perdem preço ou habilitação."
+        detalhe={excluindo && <span className="font-medium">{excluindo.nome}</span>}
+        textoConfirmar="Excluir fornecedor"
+        carregando={apagando}
+        aoCancelar={() => setExcluindo(null)}
+        aoConfirmar={() => {
+          const alvo = excluindo;
+          if (!alvo) return;
+          setExcluindo(null);
+          setApagando(true);
+          void excluirFornecedor(alvo.id)
+            .then(carregar)
+            .catch(() => setErro('Não foi possível excluir. Tente de novo.'))
+            .finally(() => setApagando(false));
+        }}
+      />
     </div>
   );
 }

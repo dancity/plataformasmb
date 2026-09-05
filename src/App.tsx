@@ -12,6 +12,7 @@ import { PainelAdmin } from '@/paginas/admin/PainelAdmin';
 import { Solucoes } from '@/paginas/admin/Solucoes';
 import { Fornecedores } from '@/paginas/admin/Fornecedores';
 import { Unidades } from '@/paginas/admin/Unidades';
+import { Usuarios } from '@/paginas/admin/Usuarios';
 
 /** Para onde cada papel vai ao abrir o app. */
 const DESTINO_PADRAO: Record<Papel, string> = {
@@ -82,6 +83,7 @@ export function App() {
         <Route path="solucoes" element={<Solucoes />} />
         <Route path="fornecedores" element={<Fornecedores />} />
         <Route path="unidades" element={<Unidades />} />
+        <Route path="usuarios" element={<Usuarios />} />
       </Route>
 
       <Route
