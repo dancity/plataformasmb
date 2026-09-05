@@ -52,11 +52,11 @@ export const SEGMENTOS: readonly Segmento[] = [
 ] as const;
 
 export const ANOS_ESCOLARES: readonly AnoEscolar[] = [
-  { id: 'EI1', nome: 'Berçário', curto: 'Berç.', segmento: 'infantil', ordem: 1 },
-  { id: 'EI2', nome: 'Maternal I', curto: 'M I', segmento: 'infantil', ordem: 2 },
-  { id: 'EI3', nome: 'Maternal II', curto: 'M II', segmento: 'infantil', ordem: 3 },
-  { id: 'EI4', nome: 'Pré I', curto: 'Pré I', segmento: 'infantil', ordem: 4 },
-  { id: 'EI5', nome: 'Pré II', curto: 'Pré II', segmento: 'infantil', ordem: 5 },
+  { id: 'EI1', nome: 'EI1', curto: 'EI1', segmento: 'infantil', ordem: 1 },
+  { id: 'EI2', nome: 'EI2', curto: 'EI2', segmento: 'infantil', ordem: 2 },
+  { id: 'EI3', nome: 'EI3', curto: 'EI3', segmento: 'infantil', ordem: 3 },
+  { id: 'EI4', nome: 'EI4', curto: 'EI4', segmento: 'infantil', ordem: 4 },
+  { id: 'EI5', nome: 'EI5', curto: 'EI5', segmento: 'infantil', ordem: 5 },
   { id: 'EF1', nome: '1º ano', curto: '1º', segmento: 'anos_iniciais', ordem: 6 },
   { id: 'EF2', nome: '2º ano', curto: '2º', segmento: 'anos_iniciais', ordem: 7 },
   { id: 'EF3', nome: '3º ano', curto: '3º', segmento: 'anos_iniciais', ordem: 8 },
