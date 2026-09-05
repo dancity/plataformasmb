@@ -218,6 +218,36 @@ export async function excluirProduto(id: string): Promise<void> {
   await lote.commit();
 }
 
+/**
+ * Apaga todo o catálogo de um ciclo — produto e regras de todos, de uma vez.
+ * Existe para limpar dado de teste durante a montagem do catálogo; um
+ * ciclo com pedido já em andamento não deveria passar por aqui.
+ *
+ * Cada exclusão vira duas operações (produto + suas regras), e o lote do
+ * Firestore tem teto de 500 — por isso os deletes saem em blocos.
+ */
+export async function excluirTodosProdutos(cicloId: string): Promise<number> {
+  const produtos = await listarProdutos(cicloId);
+  if (produtos.length === 0) return 0;
+
+  const refsRegras = await Promise.all(
+    produtos.map((p) => getDocs(collection(db, 'produtos', p.id, 'regras'))),
+  );
+  const paraApagar = [
+    ...produtos.map((p) => doc(db, 'produtos', p.id)),
+    ...refsRegras.flatMap((snap) => snap.docs.map((r) => r.ref)),
+  ];
+
+  const TAMANHO_BLOCO = 450;
+  for (let i = 0; i < paraApagar.length; i += TAMANHO_BLOCO) {
+    const lote = writeBatch(db);
+    for (const ref of paraApagar.slice(i, i + TAMANHO_BLOCO)) lote.delete(ref);
+    await lote.commit();
+  }
+
+  return produtos.length;
+}
+
 // ─── Regras de habilitação ───────────────────────────────────────
 
 /**

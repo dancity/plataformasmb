@@ -17,6 +17,7 @@ import {
   atualizarProduto,
   criarProduto,
   excluirProduto,
+  excluirTodosProdutos,
   listarFornecedores,
   listarProdutos,
   listarRegionais,
@@ -116,6 +117,8 @@ export function Solucoes() {
   const [regrasAtuais, setRegrasAtuais] = useState<RegraHabilitacao[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState<Produto | null>(null);
+  const [excluindoTudo, setExcluindoTudo] = useState(false);
+  const [apagandoTudo, setApagandoTudo] = useState(false);
 
   const carregar = useCallback(async () => {
     if (!ciclo) {
@@ -237,9 +240,16 @@ export function Solucoes() {
             primeiro, para ele conhecer o piso do orçamento antes de escolher qualquer opcional.
           </p>
         </div>
-        <Botao onClick={() => void abrirNovo()} disabled={fornecedores.length === 0}>
-          Nova solução
-        </Botao>
+        <div className="flex gap-2">
+          {produtos.length > 0 && (
+            <Botao variante="fantasma" onClick={() => setExcluindoTudo(true)}>
+              Excluir todas
+            </Botao>
+          )}
+          <Botao onClick={() => void abrirNovo()} disabled={fornecedores.length === 0}>
+            Nova solução
+          </Botao>
+        </div>
       </div>
 
       {erro && !criando && (
@@ -538,6 +548,25 @@ export function Solucoes() {
             .then(carregar)
             .catch(() => setErro('Não foi possível excluir. Tente de novo.'))
             .finally(() => setSalvando(false));
+        }}
+      />
+
+      <DialogoConfirmacao
+        aberto={excluindoTudo}
+        nivel="perigo"
+        titulo="Excluir todas as soluções"
+        descricao={`Apaga as ${produtos.length} soluções do ciclo ${ciclo.anoAlvo} e todas as regras de habilitação — o catálogo volta a ficar vazio. Pedidos já enviados não mudam: eles guardam cópia do preço e dos anos escolhidos.`}
+        textoConfirmar="Excluir todas"
+        nomeParaDigitar="excluir tudo"
+        carregando={apagandoTudo}
+        aoCancelar={() => setExcluindoTudo(false)}
+        aoConfirmar={() => {
+          setExcluindoTudo(false);
+          setApagandoTudo(true);
+          void excluirTodosProdutos(ciclo.id)
+            .then(carregar)
+            .catch(() => setErro('Não foi possível excluir todas. Tente de novo.'))
+            .finally(() => setApagandoTudo(false));
         }}
       />
 
