@@ -4,6 +4,7 @@ import {
   deleteDoc,
   doc,
   getCountFromServer,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -190,6 +191,11 @@ export async function listarProdutos(cicloId: string): Promise<Produto[]> {
     query(collection(db, 'produtos'), where('cicloId', '==', cicloId), orderBy('ordem')),
   );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Produto);
+}
+
+export async function obterProduto(id: string): Promise<Produto | null> {
+  const snap = await getDoc(doc(db, 'produtos', id));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Produto) : null;
 }
 
 export type DadosProduto = Omit<Produto, 'id' | 'criadoEm' | 'atualizadoEm'>;

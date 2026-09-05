@@ -17,6 +17,8 @@ export interface ContextoCalculo {
   alunos: number;
   /** Turmas alcançadas. Só usado quando base = 'turma'. */
   turmas?: number;
+  /** Múltiplo de alunos escolhido pelo gestor. Só usado quando base = 'credito'. */
+  creditosPorAluno?: number;
 }
 
 export function calcularValorAnual(preco: Precificacao, ctx: ContextoCalculo): Centavos {
@@ -43,6 +45,12 @@ export function quantidadeCobravel(preco: Precificacao, ctx: ContextoCalculo): n
       // Piso contratual: abaixo do mínimo, cobra-se o mínimo.
       return preco.minimoAlunos ? Math.max(ctx.alunos, preco.minimoAlunos) : ctx.alunos;
     }
+    case 'credito': {
+      // Sem o gestor ter escolhido um múltiplo, não há o que cobrar — é
+      // decisão dele, não um número que o catálogo já traz pronto.
+      if (ctx.alunos <= 0 || !ctx.creditosPorAluno) return 0;
+      return Math.round(ctx.alunos * ctx.creditosPorAluno);
+    }
   }
 }
 
@@ -51,9 +59,10 @@ export function calcularItem(
   preco: Precificacao,
   previsao: PrevisaoPorAno,
   anosSelecionados: readonly AnoEscolarId[],
+  creditosPorAluno?: number,
 ): { alunos: number; valorAnual: Centavos } {
   const alunos = alunosNosAnos(previsao, anosSelecionados);
-  return { alunos, valorAnual: calcularValorAnual(preco, { alunos }) };
+  return { alunos, valorAnual: calcularValorAnual(preco, { alunos, creditosPorAluno }) };
 }
 
 // ─── Apresentação ────────────────────────────────────────────────
@@ -80,6 +89,7 @@ const ROTULO_BASE: Record<Precificacao['base'], string> = {
   aluno: 'aluno',
   escola: 'escola',
   turma: 'turma',
+  credito: 'crédito',
 };
 
 /** Ex.: "R$ 15,00 / aluno / mês · 10 meses faturados" */
@@ -87,6 +97,11 @@ export function descreverPreco(preco: Precificacao): string {
   const unidade = `${formatarBRL(preco.valor)} / ${ROTULO_BASE[preco.base]}`;
   if (preco.ciclo === 'anual') return `${unidade} / ano`;
   return `${unidade} / mês · ${preco.meses} ${preco.meses === 1 ? 'mês' : 'meses'} faturados`;
+}
+
+/** Ex.: "1×" ou "0,5×" — o rótulo curto de uma opção de múltiplo de crédito. */
+export function rotularMultiploCredito(multiplo: number): string {
+  return `${multiplo.toLocaleString('pt-BR')}×`;
 }
 
 /** Converte "1.234,56" ou "1234.56" digitado pelo admin em centavos. */

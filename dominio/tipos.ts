@@ -96,7 +96,7 @@ export interface Ciclo {
 
 // ─── Catálogo ────────────────────────────────────────────────────
 
-export type BasePreco = 'aluno' | 'escola' | 'turma';
+export type BasePreco = 'aluno' | 'escola' | 'turma' | 'credito';
 export type CicloCobranca = 'mensal' | 'anual';
 
 export interface Precificacao {
@@ -108,6 +108,13 @@ export interface Precificacao {
   meses: number;
   /** Piso de cobrança: abaixo disso, cobra-se como se fosse este número. */
   minimoAlunos?: number;
+  /**
+   * Só quando base = 'credito': os múltiplos do total de alunos que o
+   * gestor pode escolher (ex.: 0.5, 1, 2 — 1 crédito por aluno, meio
+   * crédito por aluno). Serviço como correção de redação não cobra 1:1
+   * por aluno, mas também não é livre — a rede negociou faixas.
+   */
+  opcoesCredito?: number[];
 }
 
 export type Visibilidade = 'rascunho' | 'publicado' | 'suspenso';
@@ -221,6 +228,8 @@ export interface ItemPedido {
   /** Cópia da previsão usada no cálculo — congelada no envio. */
   alunosPorAno: PrevisaoPorAno;
   alunosTotal: number;
+  /** Só quando a solução é cobrada por crédito: o múltiplo de alunos escolhido. */
+  creditosPorAluno?: number;
   /** Cópia do preço vigente no envio. Corrigir o catálogo depois não mexe aqui. */
   precoSnapshot: Precificacao;
   valorAnual: Centavos;

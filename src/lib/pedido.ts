@@ -172,6 +172,8 @@ export async function abrirRascunho(ciclo: Ciclo, sessao: Sessao): Promise<strin
 export interface DecisaoLocal {
   anos: AnoEscolarId[];
   recusado: boolean;
+  /** Só quando a solução é cobrada por crédito: o múltiplo de alunos escolhido. */
+  creditosPorAluno?: number;
 }
 
 /**
@@ -188,7 +190,12 @@ export async function salvarDecisao(
   decisao: DecisaoLocal,
 ): Promise<ItemPedido> {
   const anos = decisao.recusado ? habilitacao.obrigatorios : anosEfetivos(habilitacao, decisao.anos);
-  const { alunos, valorAnual } = calcularItem(habilitacao.preco, previsao, anos);
+  const { alunos, valorAnual } = calcularItem(
+    habilitacao.preco,
+    previsao,
+    anos,
+    decisao.creditosPorAluno,
+  );
 
   const alunosPorAno: PrevisaoPorAno = {};
   for (const ano of anos) alunosPorAno[ano] = previsao[ano] ?? 0;
@@ -208,6 +215,9 @@ export async function salvarDecisao(
       anos.length === 0 ? 'recusado' : habilitacao.obrigatorios.length > 0 ? 'obrigatorio' : 'escolha',
     decisao: 'pendente',
     atualizadoEm: new Date().toISOString(),
+    ...(habilitacao.preco.base === 'credito' && decisao.creditosPorAluno
+      ? { creditosPorAluno: decisao.creditosPorAluno }
+      : {}),
   };
 
   const { id: _id, ...semId } = item;

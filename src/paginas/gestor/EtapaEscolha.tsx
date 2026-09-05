@@ -5,7 +5,7 @@ import { abrirRascunho, calcularLinhas, salvarDecisao, somarTotais } from '@/lib
 import type { ContextoPedido, LinhaCalculada } from '@/lib/pedido';
 import { SEGMENTOS, anosDoSegmento, ordenarAnos } from '@dominio/anosEscolares';
 import type { AnoEscolarId } from '@dominio/anosEscolares';
-import { calcularItem, descreverPreco, formatarBRL } from '@dominio/preco';
+import { calcularItem, descreverPreco, formatarBRL, rotularMultiploCredito } from '@dominio/preco';
 
 /**
  * Etapa 2 — uma solução por vez.
@@ -41,6 +41,7 @@ export function EtapaEscolha({
   // Seleção local: responde ao clique na hora, grava logo em seguida.
   const [marcados, setMarcados] = useState<Set<AnoEscolarId>>(new Set());
   const [recusado, setRecusado] = useState(false);
+  const [creditosEscolhido, setCreditosEscolhido] = useState<number | null>(null);
 
   const atual: LinhaCalculada | undefined = linhas[indice];
 
@@ -52,15 +53,22 @@ export function EtapaEscolha({
     );
     setMarcados(new Set(opcionaisMarcados));
     setRecusado(atual.item?.origem === 'recusado');
+    setCreditosEscolhido(atual.item?.creditosPorAluno ?? null);
   }, [atual]);
+
+  const precisaEscolherCredito =
+    !!atual &&
+    atual.habilitacao.preco.base === 'credito' &&
+    !recusado &&
+    (atual.habilitacao.obrigatorios.length > 0 || marcados.size > 0);
 
   const previa = useMemo(() => {
     if (!atual) return { alunos: 0, valorAnual: 0 };
     const anos = recusado
       ? atual.habilitacao.obrigatorios
       : ordenarAnos([...atual.habilitacao.obrigatorios, ...marcados]);
-    return calcularItem(atual.habilitacao.preco, ctx.previsao, anos);
-  }, [atual, marcados, recusado, ctx.previsao]);
+    return calcularItem(atual.habilitacao.preco, ctx.previsao, anos, creditosEscolhido ?? undefined);
+  }, [atual, marcados, recusado, creditosEscolhido, ctx.previsao]);
 
   const totais = useMemo(() => somarTotais(linhas), [linhas]);
   const decididas = linhas.filter((l) => l.decidida).length;
@@ -68,6 +76,10 @@ export function EtapaEscolha({
   const gravar = useCallback(
     async (proximo: boolean) => {
       if (!atual || somenteLeitura) return;
+      if (precisaEscolherCredito && !creditosEscolhido) {
+        setErro('Escolha quantos créditos por aluno antes de continuar.');
+        return;
+      }
       setSalvando(true);
       setErro(null);
       try {
@@ -78,7 +90,7 @@ export function EtapaEscolha({
           atual.habilitacao,
           ctx.fornecedores.get(atual.produto.fornecedorId) ?? '',
           ctx.previsao,
-          { anos: [...marcados], recusado },
+          { anos: [...marcados], recusado, creditosPorAluno: creditosEscolhido ?? undefined },
         );
         await aoSalvar();
         if (proximo) {
@@ -91,7 +103,20 @@ export function EtapaEscolha({
         setSalvando(false);
       }
     },
-    [atual, ctx, sessao, marcados, recusado, indice, linhas.length, somenteLeitura, aoSalvar, aoAvancar],
+    [
+      atual,
+      ctx,
+      sessao,
+      marcados,
+      recusado,
+      creditosEscolhido,
+      precisaEscolherCredito,
+      indice,
+      linhas.length,
+      somenteLeitura,
+      aoSalvar,
+      aoAvancar,
+    ],
   );
 
   if (ctx.previsao && Object.keys(ctx.previsao).length === 0) {
@@ -294,6 +319,45 @@ export function EtapaEscolha({
             </p>
           )}
 
+          {habilitacao.preco.base === 'credito' && !recusado && (
+            <fieldset disabled={somenteLeitura} className="flex flex-col gap-2 disabled:opacity-50">
+              <legend className="pb-1 text-sm font-medium text-gray-700">
+                Quantos créditos por aluno?
+              </legend>
+              <p className="text-xs text-gray-500">
+                Serviço como este não cobra 1 crédito por aluno necessariamente — a rede negociou
+                faixas. {previa.alunos} aluno{previa.alunos === 1 ? '' : 's'} nos anos marcados.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(habilitacao.preco.opcoesCredito ?? []).map((multiplo) => {
+                  const ligado = creditosEscolhido === multiplo;
+                  return (
+                    <button
+                      key={multiplo}
+                      type="button"
+                      aria-pressed={ligado}
+                      onClick={() => setCreditosEscolhido(multiplo)}
+                      className={juntar(
+                        'h-11 min-w-16 rounded-lg border px-3 text-sm transition-colors',
+                        ligado
+                          ? 'border-brand-medium bg-brand-medium font-medium text-white'
+                          : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400',
+                      )}
+                    >
+                      {rotularMultiploCredito(multiplo)}
+                    </button>
+                  );
+                })}
+              </div>
+              {creditosEscolhido && (
+                <span className="text-xs text-gray-500">
+                  {rotularMultiploCredito(creditosEscolhido)} × {previa.alunos} alunos ={' '}
+                  {Math.round(previa.alunos * creditosEscolhido)} créditos
+                </span>
+              )}
+            </fieldset>
+          )}
+
           {!temObrigatorio && !somenteLeitura && (
             <label className="flex items-center gap-2.5 rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-600">
               <input
@@ -346,7 +410,11 @@ export function EtapaEscolha({
           {somenteLeitura ? (
             <Botao onClick={aoAvancar}>Ver o mapa</Botao>
           ) : (
-            <Botao carregando={salvando} onClick={() => void gravar(true)}>
+            <Botao
+              carregando={salvando}
+              disabled={precisaEscolherCredito && !creditosEscolhido}
+              onClick={() => void gravar(true)}
+            >
               {indice < linhas.length - 1 ? 'Próxima solução' : 'Ver o mapa'}
             </Botao>
           )}

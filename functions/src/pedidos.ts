@@ -148,12 +148,17 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
 
   // O que o gestor marcou. Vale como intenção; o que é permitido quem
   // decide são as regras de habilitação, aqui no servidor.
-  const escolhas = new Map<string, { anos: AnoEscolarId[]; recusado: boolean }>();
+  const escolhas = new Map<
+    string,
+    { anos: AnoEscolarId[]; recusado: boolean; creditosPorAluno?: number }
+  >();
   for (const doc of itensSnap.docs) {
     const item = doc.data() as ItemPedido;
     escolhas.set(doc.id, {
       anos: Array.isArray(item.anosSelecionados) ? item.anosSelecionados : [],
       recusado: item.origem === 'recusado',
+      creditosPorAluno:
+        typeof item.creditosPorAluno === 'number' ? item.creditosPorAluno : undefined,
     });
   }
 
@@ -199,7 +204,21 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       continue;
     }
 
-    const { alunos, valorAnual } = calcularItem(hab.preco, previsao, anos);
+    // Crédito exige que o gestor tenha escolhido um dos múltiplos que o
+    // catálogo oferece — não é número que o servidor infere sozinho, e o
+    // que o cliente mandou não vale sem bater com a lista do catálogo.
+    let creditosPorAluno: number | undefined;
+    if (hab.preco.base === 'credito') {
+      const opcoes = hab.preco.opcoesCredito ?? [];
+      const escolhido = escolha?.creditosPorAluno;
+      if (typeof escolhido !== 'number' || !opcoes.includes(escolhido)) {
+        pendentes.push(produto.nome);
+        continue;
+      }
+      creditosPorAluno = escolhido;
+    }
+
+    const { alunos, valorAnual } = calcularItem(hab.preco, previsao, anos, creditosPorAluno);
     const alunosPorAno: Record<string, number> = {};
     for (const ano of anos) alunosPorAno[ano] = previsao[ano] ?? 0;
 
@@ -217,6 +236,7 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       origem: ehObrigatorio ? 'obrigatorio' : 'escolha',
       decisao: 'pendente',
       atualizadoEm: agora(),
+      ...(creditosPorAluno ? { creditosPorAluno } : {}),
     };
     lote.set(itemRef, item);
 

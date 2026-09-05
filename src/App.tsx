@@ -10,6 +10,7 @@ import { FluxoPedido } from '@/paginas/gestor/FluxoPedido';
 import { LayoutAdmin } from '@/paginas/admin/LayoutAdmin';
 import { PainelAdmin } from '@/paginas/admin/PainelAdmin';
 import { Solucoes } from '@/paginas/admin/Solucoes';
+import { SolucaoForm } from '@/paginas/admin/SolucaoForm';
 import { Fornecedores } from '@/paginas/admin/Fornecedores';
 import { Unidades } from '@/paginas/admin/Unidades';
 import { Usuarios } from '@/paginas/admin/Usuarios';
@@ -81,6 +82,8 @@ export function App() {
       >
         <Route index element={<PainelAdmin />} />
         <Route path="solucoes" element={<Solucoes />} />
+        <Route path="solucoes/novo" element={<SolucaoForm />} />
+        <Route path="solucoes/:produtoId/editar" element={<SolucaoForm />} />
         <Route path="fornecedores" element={<Fornecedores />} />
         <Route path="unidades" element={<Unidades />} />
         <Route path="usuarios" element={<Usuarios />} />

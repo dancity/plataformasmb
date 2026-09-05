@@ -81,6 +81,26 @@ describe('cálculo do valor anual', () => {
     expect(calcularValorAnual(preco, { alunos: 45 })).toBe(450_000); // cobra 45
   });
 
+  it('crédito cobra o múltiplo de alunos que o gestor escolheu', () => {
+    const preco: Precificacao = {
+      base: 'credito', ciclo: 'anual', valor: 800, meses: 12, opcoesCredito: [0.5, 1, 2],
+    };
+    // 1× os 440 alunos dos anos iniciais.
+    const um = calcularItem(preco, PREVISAO, ANOS_INICIAIS, 1);
+    expect(um.alunos).toBe(440);
+    expect(um.valorAnual).toBe(800 * 440);
+
+    // Meio crédito por aluno arredonda pra inteiro — não existe 0,5 crédito.
+    const meio = calcularValorAnual(preco, { alunos: 440, creditosPorAluno: 0.5 });
+    expect(meio).toBe(800 * 220);
+  });
+
+  it('crédito sem múltiplo escolhido custa zero — não é decisão que o catálogo tome sozinho', () => {
+    const preco: Precificacao = { base: 'credito', ciclo: 'anual', valor: 800, meses: 12 };
+    expect(calcularValorAnual(preco, { alunos: 440 })).toBe(0);
+    expect(calcularValorAnual(preco, { alunos: 440, creditosPorAluno: 0 })).toBe(0);
+  });
+
   it('mantém tudo em inteiro: centavos não acumulam erro de float', () => {
     const preco: Precificacao = { base: 'aluno', ciclo: 'mensal', valor: 1090, meses: 11 };
     const valor = calcularValorAnual(preco, { alunos: 97 });
