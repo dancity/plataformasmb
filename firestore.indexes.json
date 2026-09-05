@@ -29,6 +29,14 @@
       ]
     },
     {
+      "collectionGroup": "produtos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cicloId", "order": "ASCENDING" },
+        { "fieldPath": "ordem", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "unidades",
       "queryScope": "COLLECTION",
       "fields": [
