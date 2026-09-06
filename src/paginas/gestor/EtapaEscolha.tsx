@@ -411,86 +411,101 @@ export function EtapaEscolha({
                 </p>
               </div>
 
-              <fieldset disabled={somenteLeitura} className="flex flex-col gap-2 disabled:opacity-50">
-                {anosAtivos.map((ano) => {
-                  const previsaoAno = ctx.previsao[ano] ?? 0;
-                  const valor = creditosPorAno[ano];
-                  const textoMultiplicador = multiplicadores[ano] ?? '';
+              <fieldset disabled={somenteLeitura} className="disabled:opacity-50">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-xs text-gray-500">
+                      <th className="py-1.5 pr-2 text-left font-medium">Ano escolar</th>
+                      <th className="px-2 py-1.5 text-right font-medium">Nº de alunos</th>
+                      <th className="px-2 py-1.5 text-center font-medium">Multiplicador</th>
+                      <th className="pl-2 py-1.5 text-right font-medium">Nº de créditos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {anosAtivos.map((ano) => {
+                      const previsaoAno = ctx.previsao[ano] ?? 0;
+                      const valor = creditosPorAno[ano];
+                      const textoMultiplicador = multiplicadores[ano] ?? '';
 
-                  function definirCreditos(novoValor: number) {
-                    const limpo = Math.max(0, Math.round(novoValor));
-                    setCreditosPorAno((c) => ({ ...c, [ano]: limpo }));
-                    setMultiplicadores((m) => ({
-                      ...m,
-                      [ano]:
-                        previsaoAno > 0
-                          ? (limpo / previsaoAno).toLocaleString('pt-BR', { maximumFractionDigits: 4 })
-                          : '',
-                    }));
-                  }
+                      function definirCreditos(novoValor: number) {
+                        const limpo = Math.max(0, Math.round(novoValor));
+                        setCreditosPorAno((c) => ({ ...c, [ano]: limpo }));
+                        setMultiplicadores((m) => ({
+                          ...m,
+                          [ano]:
+                            previsaoAno > 0
+                              ? (limpo / previsaoAno).toLocaleString('pt-BR', {
+                                  maximumFractionDigits: 4,
+                                })
+                              : '',
+                        }));
+                      }
 
-                  return (
-                    <div key={ano} className="flex flex-wrap items-center gap-2.5">
-                      <span className="w-24 shrink-0 text-sm text-gray-600">
-                        {anoEscolar(ano).nome}
-                      </span>
-                      <span className="w-20 shrink-0 font-mono text-xs text-gray-400 tabular-nums">
-                        {previsaoAno} alunos
-                      </span>
-                      <Entrada
-                        type="number"
-                        min={0}
-                        inputMode="numeric"
-                        value={valor ?? ''}
-                        placeholder="créditos"
-                        onChange={(e) => {
-                          const texto = e.target.value;
-                          if (texto === '') {
-                            setCreditosPorAno((c) => {
-                              const copia = { ...c };
-                              delete copia[ano];
-                              return copia;
-                            });
-                            setMultiplicadores((m) => {
-                              const copia = { ...m };
-                              delete copia[ano];
-                              return copia;
-                            });
-                            return;
-                          }
-                          const n = Number(texto);
-                          if (Number.isFinite(n)) definirCreditos(n);
-                        }}
-                        className="max-w-28"
-                        aria-label={`Créditos de ${anoEscolar(ano).nome}`}
-                      />
-                      <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-                        <Entrada
-                          type="number"
-                          min={0}
-                          step="any"
-                          inputMode="decimal"
-                          disabled={previsaoAno === 0}
-                          value={textoMultiplicador}
-                          onChange={(e) => {
-                            const texto = e.target.value;
-                            setMultiplicadores((m) => ({ ...m, [ano]: texto }));
-                            const n = Number(texto);
-                            if (texto !== '' && Number.isFinite(n) && previsaoAno > 0) {
-                              setCreditosPorAno((c) => ({
-                                ...c,
-                                [ano]: Math.max(0, Math.round(previsaoAno * n)),
-                              }));
-                            }
-                          }}
-                          className="w-16 shrink-0 px-2 py-1 text-xs"
-                          aria-label={`Multiplicador por aluno de ${anoEscolar(ano).nome}`}
-                        />
-                        <span className="text-xs text-gray-400">× por aluno</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                      return (
+                        <tr key={ano} className="border-b border-gray-100 last:border-b-0">
+                          <td className="py-1.5 pr-2 text-sm text-gray-700">
+                            {anoEscolar(ano).nome}
+                          </td>
+                          <td className="px-2 py-1.5 text-right font-mono text-xs text-gray-500 tabular-nums">
+                            {previsaoAno}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <Entrada
+                              type="number"
+                              min={0}
+                              step="any"
+                              inputMode="decimal"
+                              disabled={previsaoAno === 0}
+                              value={textoMultiplicador}
+                              onChange={(e) => {
+                                const texto = e.target.value;
+                                setMultiplicadores((m) => ({ ...m, [ano]: texto }));
+                                const n = Number(texto);
+                                if (texto !== '' && Number.isFinite(n) && previsaoAno > 0) {
+                                  setCreditosPorAno((c) => ({
+                                    ...c,
+                                    [ano]: Math.max(0, Math.round(previsaoAno * n)),
+                                  }));
+                                }
+                              }}
+                              className="mx-auto max-w-10 [appearance:textfield] px-1 py-1 text-center text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              aria-label={`Multiplicador por aluno de ${anoEscolar(ano).nome}`}
+                            />
+                          </td>
+                          <td className="pl-2 py-1.5">
+                            <Entrada
+                              type="number"
+                              min={0}
+                              inputMode="numeric"
+                              value={valor ?? ''}
+                              placeholder="—"
+                              onChange={(e) => {
+                                const texto = e.target.value;
+                                if (texto === '') {
+                                  setCreditosPorAno((c) => {
+                                    const copia = { ...c };
+                                    delete copia[ano];
+                                    return copia;
+                                  });
+                                  setMultiplicadores((m) => {
+                                    const copia = { ...m };
+                                    delete copia[ano];
+                                    return copia;
+                                  });
+                                  return;
+                                }
+                                const n = Number(texto);
+                                if (Number.isFinite(n)) definirCreditos(n);
+                              }}
+                              className="ml-auto max-w-24 text-right"
+                              aria-label={`Créditos de ${anoEscolar(ano).nome}`}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </fieldset>
 
               <span className="text-sm font-medium text-gray-700">
