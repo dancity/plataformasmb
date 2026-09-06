@@ -18,6 +18,7 @@ import type {
   Ciclo,
   EstadoCiclo,
   Fornecedor,
+  Modelo,
   Obrigatoriedade,
   Produto,
   Regional,
@@ -284,6 +285,54 @@ export async function excluirTodosProdutos(cicloId: string): Promise<number> {
   }
 
   return produtos.length;
+}
+
+// ─── Modelos ─────────────────────────────────────────────────────
+
+/** Todos os modelos do ciclo, qualquer visibilidade — uso do admin. */
+export async function listarModelos(cicloId: string): Promise<Modelo[]> {
+  const snap = await getDocs(
+    query(collection(db, 'modelos'), where('cicloId', '==', cicloId), orderBy('nome')),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Modelo);
+}
+
+/** Só os publicados — o que a etapa de escolha do gestor oferece. */
+export async function listarModelosPublicados(cicloId: string): Promise<Modelo[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, 'modelos'),
+      where('cicloId', '==', cicloId),
+      where('visibilidade', '==', 'publicado'),
+      orderBy('nome'),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Modelo);
+}
+
+export async function obterModelo(id: string): Promise<Modelo | null> {
+  const snap = await getDoc(doc(db, 'modelos', id));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Modelo) : null;
+}
+
+export type DadosModelo = Omit<Modelo, 'id' | 'criadoEm' | 'atualizadoEm'>;
+
+export async function criarModelo(dados: DadosModelo): Promise<string> {
+  const agora = new Date().toISOString();
+  const ref = await addDoc(collection(db, 'modelos'), {
+    ...dados,
+    criadoEm: agora,
+    atualizadoEm: agora,
+  });
+  return ref.id;
+}
+
+export async function atualizarModelo(id: string, dados: Partial<DadosModelo>): Promise<void> {
+  await updateDoc(doc(db, 'modelos', id), { ...dados, atualizadoEm: new Date().toISOString() });
+}
+
+export async function excluirModelo(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'modelos', id));
 }
 
 // ─── Regras de habilitação ───────────────────────────────────────

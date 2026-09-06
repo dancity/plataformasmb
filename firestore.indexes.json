@@ -37,6 +37,23 @@
       ]
     },
     {
+      "collectionGroup": "modelos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cicloId", "order": "ASCENDING" },
+        { "fieldPath": "nome", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "modelos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cicloId", "order": "ASCENDING" },
+        { "fieldPath": "visibilidade", "order": "ASCENDING" },
+        { "fieldPath": "nome", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "unidades",
       "queryScope": "COLLECTION",
       "fields": [

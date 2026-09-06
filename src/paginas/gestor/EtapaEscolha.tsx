@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Botao, Cartao, Entrada, EstadoVazio, Selo, juntar } from '@/componentes/ui';
+import { DialogoConfirmacao } from '@/componentes/Modal';
 import type { Sessao } from '@/lib/auth';
-import { calcularLinhas, somarTotais } from '@/lib/pedido';
+import { listarModelosPublicados } from '@/lib/dados';
+import { calcularLinhas, resolverItensDoModelo, somarTotais } from '@/lib/pedido';
 import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
 import { SEGMENTOS, anoEscolar, anosDoSegmento, aplicarLicencas, ordenarAnos } from '@dominio/anosEscolares';
 import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
 import { calcularItem, descreverPreco, formatarBRL } from '@dominio/preco';
+import type { Modelo } from '@dominio/tipos';
 
 /**
  * Etapa 2 — uma solução por vez.
@@ -53,6 +56,20 @@ export function EtapaEscolha({
   // Licenças ajustadas manualmente, ano a ano — ausente aqui segue a previsão.
   const [licencas, setLicencas] = useState<PrevisaoPorAno>({});
   const [ajustarLicencas, setAjustarLicencas] = useState(false);
+
+  // Modelos: pacotes fechados de soluções que o gestor pode aplicar de uma
+  // vez. Carrega só os publicados, uma vez — não muda durante a etapa.
+  const [modelos, setModelos] = useState<Modelo[]>([]);
+  const [modeloEscolhido, setModeloEscolhido] = useState<Modelo | null>(null);
+  const [aplicandoModelo, setAplicandoModelo] = useState(false);
+  const [erroModelo, setErroModelo] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (somenteLeitura) return;
+    listarModelosPublicados(ctx.ciclo.id)
+      .then(setModelos)
+      .catch(() => setModelos([]));
+  }, [ctx.ciclo.id, somenteLeitura]);
 
   const atual: LinhaCalculada | undefined = linhas[indice];
 
@@ -129,6 +146,41 @@ export function EtapaEscolha({
 
   const totais = useMemo(() => somarTotais(linhas), [linhas]);
   const decididas = linhas.filter((l) => l.decidida).length;
+
+  // O que o modelo escolhido significa PARA ESTA unidade agora — recalculado
+  // a cada troca de modelo ou de linha (ex.: previsão mudou entre telas).
+  const resolucaoModelo = useMemo(
+    () => (modeloEscolhido ? resolverItensDoModelo(modeloEscolhido, linhas, ctx) : null),
+    [modeloEscolhido, linhas, ctx],
+  );
+  // Alguma solução do modelo já tem decisão gravada — aplicar substitui, não
+  // soma, então isso muda o nível de confirmação exigido. `l.decidida` não
+  // serve aqui: uma obrigatória nasce "decidida" mesmo sem nenhum item
+  // gravado, e aplicar o modelo nela não sobrescreve escolha nenhuma.
+  const modeloSobrescreve = useMemo(() => {
+    if (!resolucaoModelo) return false;
+    const idsDoModelo = new Set(resolucaoModelo.itens.map((i) => i.produto.id));
+    return linhas.some((l) => idsDoModelo.has(l.produto.id) && !!l.item);
+  }, [resolucaoModelo, linhas]);
+
+  const aplicarModeloEscolhido = useCallback(async () => {
+    if (!modeloEscolhido || !resolucaoModelo) return;
+    if (resolucaoModelo.itens.length === 0) {
+      setModeloEscolhido(null);
+      return;
+    }
+    setAplicandoModelo(true);
+    setErroModelo(null);
+    try {
+      await escritor.aplicarModelo(ctx.ciclo, sessao, resolucaoModelo.itens);
+      await aoSalvar();
+      setModeloEscolhido(null);
+    } catch {
+      setErroModelo('Não foi possível aplicar o modelo. Tente de novo.');
+    } finally {
+      setAplicandoModelo(false);
+    }
+  }, [modeloEscolhido, resolucaoModelo, escritor, ctx, sessao, aoSalvar]);
 
   // Pra onde ir depois de gravar — índice de outra solução (clique na lista
   // lateral inclusive), a etapa seguinte (mapa) ou a etapa anterior
@@ -221,7 +273,46 @@ export function EtapaEscolha({
   const temObrigatorio = habilitacao.obrigatorios.length > 0;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
+    <div className="flex flex-col gap-5">
+      {!somenteLeitura && modelos.length > 0 && (
+        <Cartao className="gap-3 p-5">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-sm font-semibold text-brand">Aplicar um modelo</h3>
+            <p className="max-w-prose text-sm text-gray-500">
+              Um modelo marca de uma vez várias soluções — todas em todos os anos habilitados para
+              a sua unidade. Depois de aplicar, você continua livre pra revisar e ajustar cada
+              solução, uma a uma.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {modelos.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                disabled={aplicandoModelo}
+                onClick={() => setModeloEscolhido(m)}
+                className="flex min-w-48 flex-col gap-1 rounded-xl border border-gray-200 bg-white p-3.5 text-left transition-all duration-150 hover:-translate-y-px hover:border-brand-medium hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="text-sm font-medium text-gray-800">{m.nome}</span>
+                {m.descricao && (
+                  <span className="line-clamp-2 text-xs text-gray-500">{m.descricao}</span>
+                )}
+                <span className="mt-1 font-mono text-[11px] tracking-wide text-gray-400 uppercase">
+                  {m.produtoIds.length} soluç{m.produtoIds.length === 1 ? 'ão' : 'ões'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </Cartao>
+      )}
+
+      {erroModelo && (
+        <p role="alert" className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800">
+          {erroModelo}
+        </p>
+      )}
+
+      <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
       {/* Lista lateral: dá para pular para qualquer solução e ver o que falta */}
       <Cartao className="h-fit gap-1 p-3">
         <span className="px-2 pb-1 font-mono text-[11px] tracking-wider text-gray-500 uppercase">
@@ -670,6 +761,58 @@ export function EtapaEscolha({
           )}
         </Cartao>
       </div>
+      </div>
+
+      <DialogoConfirmacao
+        aberto={!!modeloEscolhido}
+        nivel={modeloSobrescreve ? 'medio' : 'simples'}
+        titulo={`Aplicar "${modeloEscolhido?.nome ?? ''}"`}
+        descricao={
+          modeloSobrescreve
+            ? 'Algumas destas soluções já têm decisão gravada — aplicar o modelo substitui a decisão atual delas.'
+            : 'Cada solução abaixo entra marcada em todos os anos habilitados para a sua unidade, com crédito calculado sobre a previsão de alunos onde for o caso. Você segue livre pra ajustar qualquer uma depois.'
+        }
+        detalhe={
+          resolucaoModelo && (
+            <div className="flex flex-col gap-2">
+              {resolucaoModelo.itens.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium text-gray-700">
+                    {resolucaoModelo.itens.length === 1
+                      ? '1 solução será marcada:'
+                      : `${resolucaoModelo.itens.length} soluções serão marcadas:`}
+                  </span>
+                  <ul className="flex flex-col gap-0.5">
+                    {resolucaoModelo.itens.map((i) => (
+                      <li key={i.produto.id}>
+                        {i.produto.nome}
+                        {!!linhas.find((l) => l.produto.id === i.produto.id)?.item && (
+                          <span className="text-amber-700"> · substitui decisão atual</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {resolucaoModelo.indisponiveis.length > 0 && (
+                <div className="flex flex-col gap-1 text-xs text-gray-500">
+                  <span>Não disponíveis para a sua unidade, ficam de fora:</span>
+                  <span>{resolucaoModelo.indisponiveis.join(', ')}</span>
+                </div>
+              )}
+              {resolucaoModelo.itens.length === 0 && (
+                <span className="text-gray-500">
+                  Nenhuma solução deste modelo está disponível para a sua unidade.
+                </span>
+              )}
+            </div>
+          )
+        }
+        textoConfirmar="Aplicar modelo"
+        carregando={aplicandoModelo}
+        aoCancelar={() => setModeloEscolhido(null)}
+        aoConfirmar={() => void aplicarModeloEscolhido()}
+      />
     </div>
   );
 }

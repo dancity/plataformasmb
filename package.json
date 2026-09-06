@@ -10,7 +10,7 @@
     "typecheck": "tsc -b --noEmit",
     "emu": "firebase emulators:start --only auth,firestore,functions,hosting",
     "deploy": "npm run build && firebase deploy",
-    "test": "vitest run test/preco.test.ts",
+    "test": "vitest run test/preco.test.ts test/pedido.test.ts",
     "test:regras": "firebase emulators:exec --only firestore \"vitest run test/regras.test.ts\"",
     "test:tudo": "npm run test && npm run test:regras"
   },

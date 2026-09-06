@@ -21,6 +21,7 @@ export function useAdmin(): ContextoAdmin {
 const ABAS = [
   { para: '/admin', rotulo: 'Ciclo', fim: true },
   { para: '/admin/solucoes', rotulo: 'Soluções', fim: false },
+  { para: '/admin/modelos', rotulo: 'Modelos', fim: false },
   { para: '/admin/fornecedores', rotulo: 'Fornecedores', fim: false },
   { para: '/admin/unidades', rotulo: 'Unidades', fim: false },
   { para: '/admin/usuarios', rotulo: 'Usuários', fim: false },

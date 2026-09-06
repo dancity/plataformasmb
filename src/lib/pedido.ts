@@ -9,6 +9,7 @@ import {
   query,
   setDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
@@ -22,6 +23,7 @@ import type {
   Fornecedor,
   ItemPedido,
   Matricula,
+  Modelo,
   Pedido,
   Produto,
   RegraHabilitacao,
@@ -301,6 +303,90 @@ export function somarTotais(linhas: readonly LinhaCalculada[]): Totais {
   return { obrigatorio, opcional, total: obrigatorio + opcional };
 }
 
+// ─── Modelos ─────────────────────────────────────────────────────
+
+export interface ItemParaAplicar {
+  produto: Produto;
+  habilitacao: HabilitacaoResolvida;
+  fornecedorNome: string;
+  previsao: PrevisaoPorAno;
+  decisao: DecisaoLocal;
+}
+
+/**
+ * Resolve o que um modelo significa PARA ESTA unidade agora: cada produto do
+ * modelo que está disponível na regional do gestor entra marcado em todos os
+ * anos habilitados — os mesmos que "todo o segmento" marcaria manualmente,
+ * um a um. Produto fora do catálogo publicado ou sem regra pra esta regional
+ * não é erro: só não entra no resultado, e quem chama avisa o gestor.
+ */
+export function resolverItensDoModelo(
+  modelo: Modelo,
+  linhas: readonly LinhaCalculada[],
+  ctx: ContextoPedido,
+): { itens: ItemParaAplicar[]; indisponiveis: string[] } {
+  const porId = new Map(linhas.map((l) => [l.produto.id, l]));
+  // `linhas` já vem filtrada pelo que está disponível nesta regional — o
+  // produto mais comum de ficar de fora (sem regra aqui) nunca aparece nela.
+  // Por isso o nome de quem ficou fora vem do catálogo inteiro, não só das
+  // linhas calculadas.
+  const nomePorId = new Map(ctx.produtos.map((p) => [p.id, p.nome]));
+  const itens: ItemParaAplicar[] = [];
+  const indisponiveis: string[] = [];
+
+  for (const produtoId of modelo.produtoIds) {
+    const linha = porId.get(produtoId);
+    if (!linha || !linha.habilitacao.disponivel) {
+      indisponiveis.push(nomePorId.get(produtoId) ?? produtoId);
+      continue;
+    }
+
+    const anos = anosEfetivos(linha.habilitacao, linha.habilitacao.opcionais);
+    const decisao: DecisaoLocal = {
+      anos: linha.habilitacao.opcionais,
+      recusado: false,
+      // Cobrança por crédito não tem valor padrão no catálogo — 1 crédito
+      // por aluno é o ponto de partida mais neutro, e cada ano segue
+      // livremente editável depois de aplicar o modelo.
+      ...(linha.habilitacao.preco.base === 'credito'
+        ? { creditosPorAno: Object.fromEntries(anos.map((ano) => [ano, ctx.previsao[ano] ?? 0])) }
+        : {}),
+    };
+
+    itens.push({
+      produto: linha.produto,
+      habilitacao: linha.habilitacao,
+      fornecedorNome: ctx.fornecedores.get(linha.produto.fornecedorId) ?? '',
+      previsao: ctx.previsao,
+      decisao,
+    });
+  }
+
+  return { itens, indisponiveis };
+}
+
+/**
+ * Grava várias decisões de uma vez, num lote só — é o que aplicar um modelo
+ * faz: N soluções marcadas de uma tacada, não N idas ao servidor.
+ */
+export async function aplicarModelo(
+  ciclo: Ciclo,
+  sessao: Sessao,
+  itens: readonly ItemParaAplicar[],
+): Promise<ItemPedido[]> {
+  const pedidoId = await abrirRascunho(ciclo, sessao);
+  const lote = writeBatch(db);
+  const resultado: ItemPedido[] = [];
+  for (const { produto, habilitacao, fornecedorNome, previsao, decisao } of itens) {
+    const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao);
+    const { id: _id, ...semId } = item;
+    lote.set(doc(db, 'pedidos', pedidoId, 'itens', produto.id), semId);
+    resultado.push(item);
+  }
+  await lote.commit();
+  return resultado;
+}
+
 // ─── Etapa 5: envio ──────────────────────────────────────────────
 
 export async function enviarPedido(cicloId: string): Promise<{ totais: Totais }> {
@@ -312,7 +398,7 @@ export async function enviarPedido(cicloId: string): Promise<{ totais: Totais }>
 // ─── Escritor ────────────────────────────────────────────────────
 
 /**
- * As quatro escritas que as telas do gestor fazem, atrás de uma interface —
+ * As cinco escritas que as telas do gestor fazem, atrás de uma interface —
  * é o que permite ao admin simular o preenchimento (`pedidoSimulado.ts`)
  * reaproveitando as mesmas telas sem gravar nada em nome de uma unidade que
  * não é dele.
@@ -321,6 +407,7 @@ export interface EscritorPedido {
   salvarPrevisao: typeof salvarPrevisao;
   abrirRascunho: typeof abrirRascunho;
   salvarDecisao: typeof salvarDecisao;
+  aplicarModelo: typeof aplicarModelo;
   enviarPedido: typeof enviarPedido;
 }
 
@@ -328,5 +415,6 @@ export const escritorPedidoReal: EscritorPedido = {
   salvarPrevisao,
   abrirRascunho,
   salvarDecisao,
+  aplicarModelo,
   enviarPedido,
 };

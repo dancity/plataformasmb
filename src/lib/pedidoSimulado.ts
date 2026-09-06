@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { Pedido } from '@dominio/tipos';
+import type { Ciclo, ItemPedido, Pedido } from '@dominio/tipos';
 import {
   calcularLinhas,
   computarItem,
@@ -8,6 +8,24 @@ import {
   somarTotais,
 } from './pedido';
 import type { ContextoPedido, EscritorPedido, Totais } from './pedido';
+import type { Sessao } from './auth';
+
+/** O rascunho vazio que `abrirRascunho` e `aplicarModelo` criam, na simulação
+ * — mesmo formato do documento real, só que nunca sai da memória. */
+function criarPedidoVazio(ciclo: Ciclo, sessao: Sessao, id: string): Pedido {
+  return {
+    id,
+    cicloId: ciclo.id,
+    unidadeId: sessao.unidadeId!,
+    regionalId: sessao.regionalId!,
+    solicitante: { uid: sessao.uid, nome: sessao.nome, email: sessao.email },
+    estado: 'rascunho',
+    versao: 1,
+    totais: { obrigatorio: 0, opcional: 0, total: 0 },
+    criadoEm: new Date().toISOString(),
+    atualizadoEm: new Date().toISOString(),
+  };
+}
 
 /**
  * Escritor que nunca toca o Firestore nem chama Cloud Function: todo "salvar"
@@ -31,22 +49,7 @@ export function criarEscritorSimulado(
 
     async abrirRascunho(ciclo, sessao) {
       const id = idPedido(ciclo.id, sessao.unidadeId!);
-      setCtx((c) => {
-        if (!c || c.pedido) return c;
-        const pedido: Pedido = {
-          id,
-          cicloId: ciclo.id,
-          unidadeId: sessao.unidadeId!,
-          regionalId: sessao.regionalId!,
-          solicitante: { uid: sessao.uid, nome: sessao.nome, email: sessao.email },
-          estado: 'rascunho',
-          versao: 1,
-          totais: { obrigatorio: 0, opcional: 0, total: 0 },
-          criadoEm: new Date().toISOString(),
-          atualizadoEm: new Date().toISOString(),
-        };
-        return { ...c, pedido };
-      });
+      setCtx((c) => (!c || c.pedido ? c : { ...c, pedido: criarPedidoVazio(ciclo, sessao, id) }));
       return id;
     },
 
@@ -59,6 +62,22 @@ export function criarEscritorSimulado(
         return { ...c, itens };
       });
       return item;
+    },
+
+    async aplicarModelo(ciclo, sessao, itens) {
+      const id = idPedido(ciclo.id, sessao.unidadeId!);
+      let resultado: ItemPedido[] = [];
+      setCtx((c) => {
+        if (!c) return c;
+        const novosItens = new Map(c.itens);
+        resultado = itens.map(({ produto, habilitacao, fornecedorNome, previsao, decisao }) => {
+          const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao);
+          novosItens.set(produto.id, item);
+          return item;
+        });
+        return { ...c, itens: novosItens, pedido: c.pedido ?? criarPedidoVazio(ciclo, sessao, id) };
+      });
+      return resultado;
     },
 
     async enviarPedido(_cicloId) {

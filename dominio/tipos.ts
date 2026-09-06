@@ -128,6 +128,28 @@ export interface Produto {
   atualizadoEm: DataISO;
 }
 
+/**
+ * Pacote fechado de soluções, pronto pra aplicar de uma vez — pensado pra
+ * avaliação em geral, que costuma vir sempre com o mesmo combo (diagnóstica +
+ * simulado + redação, por exemplo). Aplicar um modelo marca, pra cada
+ * produto da lista, todos os anos habilitados na regional do gestor — os
+ * mesmos anos que "todo o segmento" marcaria manualmente, em cada uma delas.
+ * Nenhum vínculo permanece depois: é só um atalho de preenchimento, o
+ * gestor segue livre pra revisar e mudar qualquer solução uma a uma.
+ */
+export interface Modelo {
+  id: string;
+  cicloId: string;
+  nome: string;
+  descricao: string;
+  categoria: string;
+  /** Na ordem em que aparecem na etapa de escolha. */
+  produtoIds: string[];
+  visibilidade: Visibilidade;
+  criadoEm: DataISO;
+  atualizadoEm: DataISO;
+}
+
 export type Obrigatoriedade = 'indisponivel' | 'opcional' | 'obrigatorio';
 
 /**

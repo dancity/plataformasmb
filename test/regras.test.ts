@@ -320,6 +320,31 @@ describe('segredos e privilégios', () => {
       setDoc(doc(administrador(), 'produtos', 'p9'), { nome: 'Robótica', cicloId: 'c2027' }),
     );
   });
+
+  it('gestor lê modelos — precisa ver o que o modelo oferece antes de aplicar', async () => {
+    await assertSucceeds(getDoc(doc(gestorBoaViagem(), 'modelos', 'm1')));
+  });
+
+  it('quem não tem papel não lê modelos', async () => {
+    await assertFails(getDoc(doc(semClaims(), 'modelos', 'm1')));
+  });
+
+  it('gestor não escreve modelo', async () => {
+    await assertFails(
+      setDoc(doc(gestorBoaViagem(), 'modelos', 'm9'), { nome: 'Grátis', cicloId: 'c2027' }),
+    );
+  });
+
+  it('admin escreve modelo', async () => {
+    await assertSucceeds(
+      setDoc(doc(administrador(), 'modelos', 'm9'), {
+        nome: 'Avaliações padrão',
+        cicloId: 'c2027',
+        produtoIds: ['p1'],
+        visibilidade: 'publicado',
+      }),
+    );
+  });
 });
 
 // Regressão: carregarContexto() lê matrícula e pedido antes de qualquer um

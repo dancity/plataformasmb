@@ -78,6 +78,13 @@ service cloud.firestore {
       allow write: if ehAdmin();
     }
 
+    match /modelos/{modeloId} {
+      // Mesmo desenho do catálogo: todo mundo com papel lê (o gestor precisa
+      // ver o que o modelo oferece antes de aplicar), só o admin escreve.
+      allow read: if papelConhecido();
+      allow write: if ehAdmin();
+    }
+
     match /produtos/{produtoId} {
       // O filtro do que cada regional vê é feito pelas regras de
       // habilitação, não escondendo o catálogo: preço e descrição não
