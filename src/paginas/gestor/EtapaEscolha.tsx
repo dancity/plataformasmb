@@ -412,13 +412,13 @@ export function EtapaEscolha({
               </div>
 
               <fieldset disabled={somenteLeitura} className="disabled:opacity-50">
-                <table className="w-full border-collapse text-sm">
+                <table className="w-full table-fixed border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 text-xs text-gray-500">
-                      <th className="py-1.5 pr-2 text-left font-medium">Ano escolar</th>
-                      <th className="px-2 py-1.5 text-right font-medium">Nº de alunos</th>
-                      <th className="px-2 py-1.5 text-center font-medium">Multiplicador</th>
-                      <th className="pl-2 py-1.5 text-right font-medium">Nº de créditos</th>
+                      <th className="w-[34%] py-1.5 pr-2 text-left font-medium">Ano escolar</th>
+                      <th className="w-[22%] px-2 py-1.5 text-right font-medium">Nº de alunos</th>
+                      <th className="w-[20%] px-2 py-1.5 text-center font-medium">Multiplicador</th>
+                      <th className="w-[24%] pl-2 py-1.5 text-right font-medium">Nº de créditos</th>
                     </tr>
                   </thead>
                   <tbody>
