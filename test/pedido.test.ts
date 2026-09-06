@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calcularLinhas, computarItem, resolverItensDoModelo } from '@/lib/pedido';
 import type { ContextoPedido } from '@/lib/pedido';
+import { resolverHabilitacao } from '@dominio/habilitacao';
 import type { Ciclo, Modelo, Produto, RegraHabilitacao, Unidade } from '@dominio/tipos';
 
 /**
@@ -267,5 +268,83 @@ describe('computarItem — carimbo de origem do modelo', () => {
 
     expect(item.origemModeloId).toBeUndefined();
     expect(item.origemModeloNome).toBeUndefined();
+  });
+});
+
+/**
+ * Preço social substitui o preço normal por completo pra unidade social —
+ * não é desconto, é outro preço inteiro, e só vale quando a solução tiver
+ * um cadastrado E habilitado.
+ */
+describe('resolverHabilitacao — preço social', () => {
+  const produtoComSocial = produto({
+    id: 'diagnostica-social',
+    nome: 'Avaliação com preço social',
+    precificacao: { base: 'aluno', ciclo: 'anual', valor: 4000, meses: 12 },
+    precoSocialHabilitado: true,
+    precificacaoSocial: { base: 'aluno', ciclo: 'anual', valor: 1000, meses: 12 },
+  });
+  const regras: RegraHabilitacao[] = [
+    {
+      id: 'recife_EF1',
+      produtoId: 'diagnostica-social',
+      regionalId: 'recife',
+      anoEscolar: 'EF1',
+      obrigatoriedade: 'opcional',
+    },
+  ];
+  const previsao = { EF1: 88 };
+
+  it('unidade paga (padrão) usa o preço normal mesmo a solução tendo preço social', () => {
+    const hab = resolverHabilitacao(produtoComSocial, regras, 'recife', previsao, false);
+    expect(hab.preco.valor).toBe(4000);
+  });
+
+  it('unidade social usa o preço social quando habilitado', () => {
+    const hab = resolverHabilitacao(produtoComSocial, regras, 'recife', previsao, true);
+    expect(hab.preco.valor).toBe(1000);
+  });
+
+  it('unidade social usa o preço normal quando a solução não tem preço social habilitado', () => {
+    const semSocial = produto({
+      id: 'diagnostica-sem-social',
+      nome: 'Avaliação sem preço social',
+      precificacao: { base: 'aluno', ciclo: 'anual', valor: 4000, meses: 12 },
+    });
+    const hab = resolverHabilitacao(
+      semSocial,
+      [{ ...regras[0]!, produtoId: 'diagnostica-sem-social' }],
+      'recife',
+      previsao,
+      true,
+    );
+    expect(hab.preco.valor).toBe(4000);
+  });
+
+  it('preço social vale mais que o override regional — é a política mais forte', () => {
+    const comOverrideRegional: RegraHabilitacao[] = [
+      {
+        ...regras[0]!,
+        precoOverride: { base: 'aluno', ciclo: 'anual', valor: 7000, meses: 12 },
+      },
+    ];
+    const hab = resolverHabilitacao(produtoComSocial, comOverrideRegional, 'recife', previsao, true);
+    expect(hab.preco.valor).toBe(1000);
+  });
+
+  it('calcularLinhas aplica o preço social sozinho, a partir de ctx.unidade.tipo', () => {
+    const ctx: ContextoPedido = {
+      ciclo: CICLO,
+      unidade: { ...UNIDADE, tipo: 'social' },
+      previsao,
+      previsaoConfirmada: true,
+      produtos: [produtoComSocial],
+      regras,
+      fornecedores: new Map([['editora-alfa', 'Editora Alfa']]),
+      pedido: null,
+      itens: new Map(),
+    };
+    const linhas = calcularLinhas(ctx, 'recife');
+    expect(linhas[0]!.habilitacao.preco.valor).toBe(1000);
   });
 });

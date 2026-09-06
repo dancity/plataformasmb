@@ -8,9 +8,15 @@ import {
   EsqueletoLinhas,
   EstadoVazio,
   Selecao,
+  Selo,
 } from '@/componentes/ui';
-import { criarUnidade, listarRegionais, listarUnidades } from '@/lib/dados';
-import type { Regional, Unidade } from '@dominio/tipos';
+import { atualizarUnidade, criarUnidade, listarRegionais, listarUnidades } from '@/lib/dados';
+import type { Regional, TipoUnidade, Unidade } from '@dominio/tipos';
+
+const SELO_TIPO = {
+  paga: { tom: 'neutro', rotulo: 'paga' },
+  social: { tom: 'ok', rotulo: 'social' },
+} as const;
 
 export function Unidades() {
   const [carregando, setCarregando] = useState(true);
@@ -18,11 +24,13 @@ export function Unidades() {
   const [regionais, setRegionais] = useState<Regional[]>([]);
   const [filtro, setFiltro] = useState('');
   const [aberto, setAberto] = useState(false);
+  const [editando, setEditando] = useState<Unidade | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [nome, setNome] = useState('');
   const [codigo, setCodigo] = useState('');
   const [regionalId, setRegionalId] = useState('');
+  const [tipo, setTipo] = useState<TipoUnidade>('paga');
 
   const carregar = useCallback(async () => {
     try {
@@ -63,16 +71,40 @@ export function Unidades() {
     return mapa;
   }, [unidades]);
 
+  function abrirNova() {
+    setEditando(null);
+    setNome('');
+    setCodigo('');
+    setRegionalId('');
+    setTipo('paga');
+    setErro(null);
+    setAberto(true);
+  }
+
+  function abrirEdicao(u: Unidade) {
+    setEditando(u);
+    setNome(u.nome);
+    setCodigo(u.codigo);
+    setRegionalId(u.regionalId);
+    // Cadastrada antes deste campo existir conta como paga, a mais comum.
+    setTipo(u.tipo ?? 'paga');
+    setErro(null);
+    setAberto(true);
+  }
+
   async function salvar() {
     setSalvando(true);
     setErro(null);
     try {
       if (!nome.trim()) throw new Error('A unidade precisa de um nome.');
-      if (!codigo.trim()) throw new Error('O código identifica a unidade — não pode ficar vazio.');
       if (!regionalId) throw new Error('Escolha a regional.');
-      await criarUnidade({ nome, codigo, regionalId });
-      setNome('');
-      setCodigo('');
+
+      if (editando) {
+        await atualizarUnidade(editando.id, { nome: nome.trim(), regionalId, tipo });
+      } else {
+        if (!codigo.trim()) throw new Error('O código identifica a unidade — não pode ficar vazio.');
+        await criarUnidade({ nome, codigo, regionalId, tipo });
+      }
       setAberto(false);
       await carregar();
     } catch (e) {
@@ -91,15 +123,16 @@ export function Unidades() {
           <h1 className="text-xl font-semibold text-brand">Unidades</h1>
           <p className="text-sm text-gray-500">
             {unidades.length} cadastrada{unidades.length === 1 ? '' : 's'}. Cada unidade pertence a
-            uma regional, e é a regional que decide o que ela pode contratar.
+            uma regional, e é a regional que decide o que ela pode contratar. Unidade social paga o
+            preço social das soluções que tiverem um cadastrado.
           </p>
         </div>
-        <Botao onClick={() => setAberto(true)} disabled={regionais.length === 0}>
+        <Botao onClick={abrirNova} disabled={regionais.length === 0}>
           Nova unidade
         </Botao>
       </div>
 
-      {erro && (
+      {erro && !aberto && (
         <p role="alert" className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800">
           {erro}
         </p>
@@ -116,7 +149,7 @@ export function Unidades() {
           icone={<span aria-hidden="true">🏫</span>}
           titulo="Nenhuma unidade cadastrada"
           descricao="São 97 na rede. Comece por uma para testar o fluxo inteiro de ponta a ponta; a carga em massa por planilha entra depois, quando a lista oficial estiver fechada."
-          acao={<Botao onClick={() => setAberto(true)}>Cadastrar uma unidade</Botao>}
+          acao={<Botao onClick={abrirNova}>Cadastrar uma unidade</Botao>}
         />
       ) : (
         <>
@@ -141,9 +174,19 @@ export function Unidades() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {visiveis.map((u) => (
               <Cartao key={u.id} className="gap-1 p-4">
-                <span className="font-medium text-gray-700">{u.nome}</span>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <span className="font-medium text-gray-700">{u.nome}</span>
+                  <Selo tom={SELO_TIPO[u.tipo ?? 'paga'].tom}>{SELO_TIPO[u.tipo ?? 'paga'].rotulo}</Selo>
+                </div>
                 <span className="text-xs text-gray-500">{nomeRegional(u.regionalId)}</span>
                 <span className="font-mono text-xs text-gray-400">{u.codigo}</span>
+                <button
+                  type="button"
+                  onClick={() => abrirEdicao(u)}
+                  className="mt-1 w-fit text-xs text-brand-medium hover:underline"
+                >
+                  Editar
+                </button>
               </Cartao>
             ))}
           </div>
@@ -157,14 +200,14 @@ export function Unidades() {
       <Modal
         aberto={aberto}
         aoFechar={() => setAberto(false)}
-        titulo="Nova unidade"
+        titulo={editando ? 'Editar unidade' : 'Nova unidade'}
         rodape={
           <>
             <Botao variante="secundario" onClick={() => setAberto(false)} disabled={salvando}>
               Cancelar
             </Botao>
             <Botao onClick={() => void salvar()} carregando={salvando}>
-              Cadastrar
+              {editando ? 'Salvar alterações' : 'Cadastrar'}
             </Botao>
           </>
         }
@@ -178,13 +221,18 @@ export function Unidades() {
         </Campo>
         <Campo
           rotulo="Código"
-          obrigatorio
-          dica="Vira o identificador da unidade no sistema. Curto e estável."
+          obrigatorio={!editando}
+          dica={
+            editando
+              ? 'Vira o identificador da unidade no sistema — não muda depois de cadastrado.'
+              : 'Vira o identificador da unidade no sistema. Curto e estável.'
+          }
         >
           <Entrada
             value={codigo}
             onChange={(e) => setCodigo(e.target.value)}
             placeholder="boa-viagem"
+            disabled={!!editando}
           />
         </Campo>
         <Campo rotulo="Regional" obrigatorio>
@@ -195,6 +243,15 @@ export function Unidades() {
                 {r.nome}
               </option>
             ))}
+          </Selecao>
+        </Campo>
+        <Campo
+          rotulo="Tipo"
+          dica="Social paga o preço social das soluções que tiverem um cadastrado e habilitado; do contrário, o preço normal vale igual."
+        >
+          <Selecao value={tipo} onChange={(e) => setTipo(e.target.value as TipoUnidade)}>
+            <option value="paga">Paga</option>
+            <option value="social">Social</option>
           </Selecao>
         </Campo>
         {erro && (

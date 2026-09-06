@@ -130,7 +130,7 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   }
   const previsao = (matriculaDoc.data() as Matricula).porAno;
 
-  const [produtosSnap, regrasSnap, fornecedoresSnap, itensSnap] = await Promise.all([
+  const [produtosSnap, regrasSnap, fornecedoresSnap, itensSnap, unidadeDoc] = await Promise.all([
     db
       .collection('produtos')
       .where('cicloId', '==', cicloId)
@@ -139,7 +139,11 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
     db.collectionGroup('regras').where('regionalId', '==', quem.regionalId).get(),
     db.collection('fornecedores').get(),
     pedidoRef.collection('itens').get(),
+    db.collection('unidades').doc(quem.unidadeId).get(),
   ]);
+  // Preço social é da unidade, não do gestor — lido aqui, não recebido, pela
+  // mesma razão que previsão e catálogo: quem manda no servidor é o cadastro.
+  const unidadeSocial = (unidadeDoc.data() as Unidade | undefined)?.tipo === 'social';
 
   const produtos = produtosSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Produto);
   const regras = regrasSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as RegraHabilitacao);
@@ -182,7 +186,7 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   const pendentes: string[] = [];
 
   for (const produto of produtos) {
-    const hab = resolverHabilitacao(produto, regras, quem.regionalId, previsao);
+    const hab = resolverHabilitacao(produto, regras, quem.regionalId, previsao, unidadeSocial);
     if (!hab.disponivel) continue;
 
     const escolha = escolhas.get(produto.id);

@@ -28,6 +28,7 @@ export function resolverHabilitacao(
   regras: readonly RegraHabilitacao[],
   regionalId: string,
   previsao: PrevisaoPorAno,
+  unidadeSocial = false,
 ): HabilitacaoResolvida {
   const opcionais: AnoEscolarId[] = [];
   const obrigatorios: AnoEscolarId[] = [];
@@ -44,6 +45,13 @@ export function resolverHabilitacao(
 
     // O override é por regional; a primeira regra da regional já o define.
     if (regra.precoOverride) preco = regra.precoOverride;
+  }
+
+  // Preço social substitui QUALQUER preço vigente (base ou override
+  // regional) — é a política institucional pra unidade social, não um
+  // desconto sobre o que a regional negociou.
+  if (unidadeSocial && produto.precoSocialHabilitado && produto.precificacaoSocial) {
+    preco = produto.precificacaoSocial;
   }
 
   return {

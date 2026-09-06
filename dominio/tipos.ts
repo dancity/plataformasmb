@@ -61,12 +61,21 @@ export interface Regional {
   ativa: boolean;
 }
 
+/**
+ * Social paga o preço social do catálogo quando a solução tiver um
+ * cadastrado e habilitado; do contrário paga o preço normal, igual a paga.
+ * Opcional pra não quebrar unidade cadastrada antes deste campo existir —
+ * ausente conta como 'paga', a mais comum.
+ */
+export type TipoUnidade = 'paga' | 'social';
+
 export interface Unidade {
   id: string;
   nome: string;
   codigo: string;
   regionalId: string;
   ativa: boolean;
+  tipo?: TipoUnidade;
 }
 
 export interface Fornecedor {
@@ -121,6 +130,15 @@ export interface Produto {
   descricao: string;
   materialUrl?: string;
   precificacao: Precificacao;
+  /**
+   * Preço alternativo pra unidade social — substitui `precificacao` por
+   * completo pra quem contrata a partir de uma unidade `tipo: 'social'`,
+   * não é desconto sobre o valor normal. Só vale quando
+   * `precoSocialHabilitado` for true; dá pra deixar um valor cadastrado e
+   * ainda não em vigor, sem perder o que foi digitado ao desabilitar.
+   */
+  precificacaoSocial?: Precificacao;
+  precoSocialHabilitado?: boolean;
   /** Ordem na etapa de escolha. Obrigatórias primeiro, por convenção. */
   ordem: number;
   visibilidade: Visibilidade;

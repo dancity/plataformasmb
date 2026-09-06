@@ -17,6 +17,7 @@ import type {
   BasePreco,
   CicloCobranca,
   Fornecedor,
+  Precificacao,
   Regional,
   RegraHabilitacao,
   Visibilidade,
@@ -56,6 +57,12 @@ interface Rascunho {
   minimoAlunos: string;
   ordem: string;
   visibilidade: Visibilidade;
+  precoSocialHabilitado: boolean;
+  baseSocial: BasePreco;
+  cicloCobrancaSocial: CicloCobranca;
+  valorTextoSocial: string;
+  mesesSocial: string;
+  minimoAlunosSocial: string;
 }
 
 const VAZIO: Rascunho = {
@@ -71,7 +78,101 @@ const VAZIO: Rascunho = {
   minimoAlunos: '',
   ordem: '10',
   visibilidade: 'rascunho',
+  precoSocialHabilitado: false,
+  baseSocial: 'aluno',
+  cicloCobrancaSocial: 'mensal',
+  valorTextoSocial: '',
+  mesesSocial: '10',
+  minimoAlunosSocial: '',
 };
+
+/** Grupo "cobrado por / periodicidade / valor / meses / mínimo" — o mesmo
+ * pra preço normal e preço social, só que endereçado a campos diferentes do
+ * rascunho. */
+function CamposPreco({
+  base,
+  cicloCobranca,
+  valorTexto,
+  meses,
+  minimoAlunos,
+  rotuloValor,
+  aoMudarBase,
+  aoMudarCiclo,
+  aoMudarValor,
+  aoMudarMeses,
+  aoMudarMinimo,
+}: {
+  base: BasePreco;
+  cicloCobranca: CicloCobranca;
+  valorTexto: string;
+  meses: string;
+  minimoAlunos: string;
+  rotuloValor: string;
+  aoMudarBase: (v: BasePreco) => void;
+  aoMudarCiclo: (v: CicloCobranca) => void;
+  aoMudarValor: (v: string) => void;
+  aoMudarMeses: (v: string) => void;
+  aoMudarMinimo: (v: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Campo rotulo="Cobrado por">
+        <Selecao value={base} onChange={(e) => aoMudarBase(e.target.value as BasePreco)}>
+          <option value="aluno">Aluno</option>
+          <option value="escola">Escola (unidade inteira)</option>
+          <option value="turma">Turma</option>
+          <option value="credito">Créditos</option>
+        </Selecao>
+      </Campo>
+
+      <Campo rotulo="Periodicidade">
+        <Selecao
+          value={cicloCobranca}
+          onChange={(e) => aoMudarCiclo(e.target.value as CicloCobranca)}
+        >
+          <option value="mensal">Mensal</option>
+          <option value="anual">Anual</option>
+        </Selecao>
+      </Campo>
+
+      <Campo rotulo={base === 'credito' ? `${rotuloValor}, por crédito` : rotuloValor} obrigatorio>
+        <Entrada
+          value={valorTexto}
+          onChange={(e) => aoMudarValor(e.target.value)}
+          placeholder="15,00"
+          inputMode="decimal"
+        />
+      </Campo>
+
+      {cicloCobranca === 'mensal' && (
+        <Campo
+          rotulo="Meses faturados"
+          dica="Solução educacional raramente cobra 12. Chutar 12 infla o orçamento da rede."
+        >
+          <Entrada
+            type="number"
+            min={1}
+            max={12}
+            value={meses}
+            onChange={(e) => aoMudarMeses(e.target.value)}
+          />
+        </Campo>
+      )}
+
+      {base === 'aluno' && (
+        <Campo rotulo="Mínimo de alunos" dica="Opcional. Abaixo disso, cobra-se o mínimo.">
+          <Entrada
+            type="number"
+            min={0}
+            value={minimoAlunos}
+            onChange={(e) => aoMudarMinimo(e.target.value)}
+            placeholder="sem mínimo"
+          />
+        </Campo>
+      )}
+    </div>
+  );
+}
 
 export function SolucaoForm() {
   const { ciclo } = useAdmin();
@@ -110,6 +211,7 @@ export function SolucaoForm() {
         }
         setRegrasAtuais(regras);
         setGrade(regrasParaGrade(regras));
+        const social = produto.precificacaoSocial;
         setRascunho({
           nome: produto.nome,
           fornecedorId: produto.fornecedorId,
@@ -125,6 +227,12 @@ export function SolucaoForm() {
             : '',
           ordem: String(produto.ordem),
           visibilidade: produto.visibilidade,
+          precoSocialHabilitado: produto.precoSocialHabilitado ?? false,
+          baseSocial: social?.base ?? produto.precificacao.base,
+          cicloCobrancaSocial: social?.ciclo ?? produto.precificacao.ciclo,
+          valorTextoSocial: social ? (social.valor / 100).toFixed(2).replace('.', ',') : '',
+          mesesSocial: String(social?.meses ?? 10),
+          minimoAlunosSocial: social?.minimoAlunos ? String(social.minimoAlunos) : '',
         });
       }
     } catch {
@@ -154,6 +262,55 @@ export function SolucaoForm() {
         throw new Error('Meses faturados deve ser um número de 1 a 12.');
       }
 
+      // Preço social: exigido e validado só quando habilitado. Desabilitado
+      // com algo digitado, o valor é preservado (best-effort) pra não sumir
+      // se a administração religar depois — só não entra se não parsear.
+      let precificacaoSocial: Precificacao | undefined;
+      if (rascunho.precoSocialHabilitado) {
+        const valorSocial = reaisParaCentavos(rascunho.valorTextoSocial || '0');
+        if (valorSocial <= 0) throw new Error('O preço social precisa ser maior que zero.');
+        const mesesSocial = Number(rascunho.mesesSocial);
+        if (
+          rascunho.cicloCobrancaSocial === 'mensal' &&
+          (!Number.isInteger(mesesSocial) || mesesSocial < 1 || mesesSocial > 12)
+        ) {
+          throw new Error('Meses faturados do preço social deve ser um número de 1 a 12.');
+        }
+        precificacaoSocial = {
+          base: rascunho.baseSocial,
+          ciclo: rascunho.cicloCobrancaSocial,
+          valor: valorSocial,
+          meses: rascunho.cicloCobrancaSocial === 'mensal' ? mesesSocial : 12,
+          ...(rascunho.baseSocial === 'aluno' && rascunho.minimoAlunosSocial
+            ? { minimoAlunos: Number(rascunho.minimoAlunosSocial) }
+            : {}),
+        };
+      } else if (rascunho.valorTextoSocial.trim()) {
+        try {
+          const valorSocial = reaisParaCentavos(rascunho.valorTextoSocial);
+          if (valorSocial > 0) {
+            const mesesSocial = Number(rascunho.mesesSocial);
+            precificacaoSocial = {
+              base: rascunho.baseSocial,
+              ciclo: rascunho.cicloCobrancaSocial,
+              valor: valorSocial,
+              meses:
+                rascunho.cicloCobrancaSocial === 'mensal' &&
+                Number.isInteger(mesesSocial) &&
+                mesesSocial >= 1 &&
+                mesesSocial <= 12
+                  ? mesesSocial
+                  : 12,
+              ...(rascunho.baseSocial === 'aluno' && rascunho.minimoAlunosSocial
+                ? { minimoAlunos: Number(rascunho.minimoAlunosSocial) }
+                : {}),
+            };
+          }
+        } catch {
+          // Não parseou — segue sem preço social, sem travar o salvamento.
+        }
+      }
+
       const dados = {
         cicloId: ciclo.id,
         nome: rascunho.nome.trim(),
@@ -170,6 +327,8 @@ export function SolucaoForm() {
             ? { minimoAlunos: Number(rascunho.minimoAlunos) }
             : {}),
         },
+        precoSocialHabilitado: rascunho.precoSocialHabilitado,
+        ...(precificacaoSocial ? { precificacaoSocial } : {}),
         ordem: Number(rascunho.ordem) || 0,
         visibilidade: rascunho.visibilidade,
       };
@@ -217,6 +376,20 @@ export function SolucaoForm() {
         ciclo: rascunho.cicloCobranca,
         valor,
         meses: Number(rascunho.meses) || 12,
+      });
+    } catch {
+      return 'valor inválido';
+    }
+  })();
+
+  const previaPrecoSocial = (() => {
+    try {
+      const valor = reaisParaCentavos(rascunho.valorTextoSocial || '0');
+      return descreverPreco({
+        base: rascunho.baseSocial,
+        ciclo: rascunho.cicloCobrancaSocial,
+        valor,
+        meses: Number(rascunho.mesesSocial) || 12,
       });
     } catch {
       return 'valor inválido';
@@ -309,70 +482,19 @@ export function SolucaoForm() {
       <fieldset className="flex flex-col gap-4 rounded-xl border border-gray-200 p-4">
         <legend className="px-1 text-sm font-medium text-gray-700">Preço</legend>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Campo rotulo="Cobrado por">
-            <Selecao
-              value={rascunho.base}
-              onChange={(e) => setRascunho({ ...rascunho, base: e.target.value as BasePreco })}
-            >
-              <option value="aluno">Aluno</option>
-              <option value="escola">Escola (unidade inteira)</option>
-              <option value="turma">Turma</option>
-              <option value="credito">Créditos</option>
-            </Selecao>
-          </Campo>
-
-          <Campo rotulo="Periodicidade">
-            <Selecao
-              value={rascunho.cicloCobranca}
-              onChange={(e) =>
-                setRascunho({ ...rascunho, cicloCobranca: e.target.value as CicloCobranca })
-              }
-            >
-              <option value="mensal">Mensal</option>
-              <option value="anual">Anual</option>
-            </Selecao>
-          </Campo>
-
-          <Campo
-            rotulo={rascunho.base === 'credito' ? 'Valor por crédito, em reais' : 'Valor em reais'}
-            obrigatorio
-          >
-            <Entrada
-              value={rascunho.valorTexto}
-              onChange={(e) => setRascunho({ ...rascunho, valorTexto: e.target.value })}
-              placeholder="15,00"
-              inputMode="decimal"
-            />
-          </Campo>
-
-          {rascunho.cicloCobranca === 'mensal' && (
-            <Campo
-              rotulo="Meses faturados"
-              dica="Solução educacional raramente cobra 12. Chutar 12 infla o orçamento da rede."
-            >
-              <Entrada
-                type="number"
-                min={1}
-                max={12}
-                value={rascunho.meses}
-                onChange={(e) => setRascunho({ ...rascunho, meses: e.target.value })}
-              />
-            </Campo>
-          )}
-
-          {rascunho.base === 'aluno' && (
-            <Campo rotulo="Mínimo de alunos" dica="Opcional. Abaixo disso, cobra-se o mínimo.">
-              <Entrada
-                type="number"
-                min={0}
-                value={rascunho.minimoAlunos}
-                onChange={(e) => setRascunho({ ...rascunho, minimoAlunos: e.target.value })}
-                placeholder="sem mínimo"
-              />
-            </Campo>
-          )}
-        </div>
+        <CamposPreco
+          base={rascunho.base}
+          cicloCobranca={rascunho.cicloCobranca}
+          valorTexto={rascunho.valorTexto}
+          meses={rascunho.meses}
+          minimoAlunos={rascunho.minimoAlunos}
+          rotuloValor="Valor em reais"
+          aoMudarBase={(base) => setRascunho({ ...rascunho, base })}
+          aoMudarCiclo={(cicloCobranca) => setRascunho({ ...rascunho, cicloCobranca })}
+          aoMudarValor={(valorTexto) => setRascunho({ ...rascunho, valorTexto })}
+          aoMudarMeses={(meses) => setRascunho({ ...rascunho, meses })}
+          aoMudarMinimo={(minimoAlunos) => setRascunho({ ...rascunho, minimoAlunos })}
+        />
 
         <p className="rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700">
           O gestor vai ler: <strong>{previaPreco}</strong>
@@ -381,6 +503,50 @@ export function SolucaoForm() {
             <> — e digita a quantidade de créditos de cada ano escolar na hora de contratar.</>
           )}
         </p>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-4 rounded-xl border border-gray-200 p-4">
+        <legend className="px-1 text-sm font-medium text-gray-700">Preço social</legend>
+
+        <label className="flex items-center gap-2.5 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={rascunho.precoSocialHabilitado}
+            onChange={(e) => setRascunho({ ...rascunho, precoSocialHabilitado: e.target.checked })}
+            className="h-4 w-4 accent-[var(--color-brand-medium)]"
+          />
+          Esta solução tem um preço diferente para unidade social
+        </label>
+        <p className="-mt-2 text-xs text-gray-500">
+          Não é desconto sobre o preço acima — é outro preço inteiro, que substitui o normal por
+          completo pra quem contrata a partir de uma unidade marcada como social (cadastro de
+          Unidades). Desabilitado, a unidade social paga o preço normal, igual a qualquer outra.
+        </p>
+
+        {rascunho.precoSocialHabilitado && (
+          <>
+            <CamposPreco
+              base={rascunho.baseSocial}
+              cicloCobranca={rascunho.cicloCobrancaSocial}
+              valorTexto={rascunho.valorTextoSocial}
+              meses={rascunho.mesesSocial}
+              minimoAlunos={rascunho.minimoAlunosSocial}
+              rotuloValor="Valor social em reais"
+              aoMudarBase={(baseSocial) => setRascunho({ ...rascunho, baseSocial })}
+              aoMudarCiclo={(cicloCobrancaSocial) =>
+                setRascunho({ ...rascunho, cicloCobrancaSocial })
+              }
+              aoMudarValor={(valorTextoSocial) => setRascunho({ ...rascunho, valorTextoSocial })}
+              aoMudarMeses={(mesesSocial) => setRascunho({ ...rascunho, mesesSocial })}
+              aoMudarMinimo={(minimoAlunosSocial) =>
+                setRascunho({ ...rascunho, minimoAlunosSocial })
+              }
+            />
+            <p className="rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700">
+              Unidade social vai ler: <strong>{previaPrecoSocial}</strong>
+            </p>
+          </>
+        )}
       </fieldset>
 
       <fieldset className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4">

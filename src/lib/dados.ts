@@ -24,6 +24,7 @@ import type {
   Produto,
   Regional,
   RegraHabilitacao,
+  TipoUnidade,
   Unidade,
 } from '@dominio/tipos';
 import { ANOS_ESCOLARES } from '@dominio/anosEscolares';
@@ -83,15 +84,24 @@ export async function criarUnidade(dados: {
   nome: string;
   codigo: string;
   regionalId: string;
+  tipo: TipoUnidade;
 }): Promise<string> {
   const id = dados.codigo.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
   await setDoc(doc(db, 'unidades', id), {
     nome: dados.nome.trim(),
     codigo: dados.codigo.trim(),
     regionalId: dados.regionalId,
+    tipo: dados.tipo,
     ativa: true,
   });
   return id;
+}
+
+export async function atualizarUnidade(
+  id: string,
+  dados: Partial<{ nome: string; regionalId: string; tipo: TipoUnidade; ativa: boolean }>,
+): Promise<void> {
+  await updateDoc(doc(db, 'unidades', id), { ...dados });
 }
 
 // ─── Ciclos ──────────────────────────────────────────────────────

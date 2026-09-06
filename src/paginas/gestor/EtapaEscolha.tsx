@@ -447,8 +447,13 @@ export function EtapaEscolha({
                 Ver material do fornecedor ↗
               </a>
             )}
-            <span className="w-fit rounded-lg bg-gray-100 px-3 py-1.5 font-mono text-xs text-brand">
-              {descreverPreco(habilitacao.preco)}
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="w-fit rounded-lg bg-gray-100 px-3 py-1.5 font-mono text-xs text-brand">
+                {descreverPreco(habilitacao.preco)}
+              </span>
+              {ctx.unidade.tipo === 'social' && produto.precoSocialHabilitado && (
+                <Selo tom="ok">preço social da sua unidade</Selo>
+              )}
             </span>
           </div>
 

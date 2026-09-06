@@ -274,9 +274,16 @@ export interface LinhaCalculada {
 
 /** Resolve habilitação e valor de todas as soluções de uma vez. */
 export function calcularLinhas(ctx: ContextoPedido, regionalId: string): LinhaCalculada[] {
+  const unidadeSocial = ctx.unidade.tipo === 'social';
   return ctx.produtos
     .map((produto) => {
-      const habilitacao = resolverHabilitacao(produto, ctx.regras, regionalId, ctx.previsao);
+      const habilitacao = resolverHabilitacao(
+        produto,
+        ctx.regras,
+        regionalId,
+        ctx.previsao,
+        unidadeSocial,
+      );
       const item = ctx.itens.get(produto.id);
       const obrigatoria = habilitacao.obrigatorios.length > 0;
       return {
