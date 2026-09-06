@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DialogoConfirmacao } from '@/componentes/Modal';
 import { Botao, Cartao, EsqueletoLinhas, EstadoVazio, Selo } from '@/componentes/ui';
@@ -12,6 +12,46 @@ import {
 import type { Fornecedor, Produto } from '@dominio/tipos';
 import { descreverPreco, formatarBRL } from '@dominio/preco';
 import { useAdmin } from './LayoutAdmin';
+
+function IconeSvg({ children }: { children: ReactNode }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+      <g stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        {children}
+      </g>
+    </svg>
+  );
+}
+
+function IconeEditar() {
+  return (
+    <IconeSvg>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </IconeSvg>
+  );
+}
+
+function IconeDuplicar() {
+  return (
+    <IconeSvg>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+    </IconeSvg>
+  );
+}
+
+function IconeExcluir() {
+  return (
+    <IconeSvg>
+      <path d="M4 7h16" />
+      <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+      <path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </IconeSvg>
+  );
+}
 
 const SELO_VISIBILIDADE = {
   rascunho: { tom: 'neutro', rotulo: 'rascunho' },
@@ -153,22 +193,32 @@ export function Solucoes() {
                 <div className="flex gap-2">
                   <Botao
                     variante="secundario"
-                    tamanho="sm"
+                    tamanho="icone"
+                    aria-label="Editar solução"
+                    title="Editar"
                     onClick={() => navegar(`/admin/solucoes/${p.id}/editar`)}
                   >
-                    Editar
+                    <IconeEditar />
                   </Botao>
                   <Botao
                     variante="secundario"
-                    tamanho="sm"
+                    tamanho="icone"
+                    aria-label="Duplicar solução"
+                    title="Duplicar"
                     carregando={duplicando === p.id}
                     disabled={duplicando !== null && duplicando !== p.id}
                     onClick={() => duplicar(p.id)}
                   >
-                    Duplicar
+                    <IconeDuplicar />
                   </Botao>
-                  <Botao variante="fantasma" tamanho="sm" onClick={() => setExcluindo(p)}>
-                    Excluir
+                  <Botao
+                    variante="fantasma"
+                    tamanho="icone"
+                    aria-label="Excluir solução"
+                    title="Excluir"
+                    onClick={() => setExcluindo(p)}
+                  >
+                    <IconeExcluir />
                   </Botao>
                 </div>
               </div>

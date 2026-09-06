@@ -14,7 +14,7 @@ export function juntar(...classes: (string | false | null | undefined)[]): strin
 // ─── Botão ───────────────────────────────────────────────────────
 
 type VarianteBotao = 'primario' | 'secundario' | 'fantasma' | 'perigo';
-type TamanhoBotao = 'md' | 'sm';
+type TamanhoBotao = 'md' | 'sm' | 'icone';
 
 const ESTILO_BOTAO: Record<VarianteBotao, string> = {
   primario: 'bg-brand-medium text-white hover:bg-brand shadow-sm',
@@ -26,6 +26,8 @@ const ESTILO_BOTAO: Record<VarianteBotao, string> = {
 const TAMANHO_BOTAO: Record<TamanhoBotao, string> = {
   md: 'px-4 py-2.5 text-sm',
   sm: 'px-3 py-1.5 text-xs',
+  // Só o ícone, sem texto ao lado — precisa de aria-label no lugar de children legível.
+  icone: 'p-2',
 };
 
 interface PropsBotao extends ButtonHTMLAttributes<HTMLButtonElement> {
