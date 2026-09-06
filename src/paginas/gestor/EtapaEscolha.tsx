@@ -46,9 +46,10 @@ export function EtapaEscolha({
   // Créditos digitados em cada ano — ano ausente ainda não decidiu (0 é uma
   // escolha válida, ausência não é).
   const [creditosPorAno, setCreditosPorAno] = useState<PrevisaoPorAno>({});
-  // Atalho de preenchimento rápido: multiplicador digitado uma vez, aplicado
-  // a todos os anos marcados de uma tacada.
-  const [multiplicadorRapido, setMultiplicadorRapido] = useState('');
+  // Texto do "Nx por aluno" de cada ano — espelha creditosPorAno, mas como
+  // string própria pra não brigar com o cursor enquanto a pessoa digita um
+  // decimal (0,5). Atualiza sozinho quando os créditos mudam por outra via.
+  const [multiplicadores, setMultiplicadores] = useState<Partial<Record<AnoEscolarId, string>>>({});
   // Licenças ajustadas manualmente, ano a ano — ausente aqui segue a previsão.
   const [licencas, setLicencas] = useState<PrevisaoPorAno>({});
   const [ajustarLicencas, setAjustarLicencas] = useState(false);
@@ -63,8 +64,19 @@ export function EtapaEscolha({
     );
     setMarcados(new Set(opcionaisMarcados));
     setRecusado(atual.item?.origem === 'recusado');
-    setCreditosPorAno(atual.item?.creditosPorAno ?? {});
-    setMultiplicadorRapido('');
+    const creditos = atual.item?.creditosPorAno ?? {};
+    setCreditosPorAno(creditos);
+    const multiplicadoresIniciais: Partial<Record<AnoEscolarId, string>> = {};
+    for (const [ano, qtd] of Object.entries(creditos)) {
+      const anoId = ano as AnoEscolarId;
+      const previsaoAno = ctx.previsao[anoId] ?? 0;
+      if (previsaoAno > 0) {
+        multiplicadoresIniciais[anoId] = (qtd / previsaoAno).toLocaleString('pt-BR', {
+          maximumFractionDigits: 4,
+        });
+      }
+    }
+    setMultiplicadores(multiplicadoresIniciais);
 
     // Só guarda o que realmente diverge da previsão — o resto segue normal.
     const divergentes: PrevisaoPorAno = {};
@@ -399,61 +411,24 @@ export function EtapaEscolha({
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
-                <span className="text-xs text-gray-500">Preencher todos os anos:</span>
-                <Botao
-                  variante="secundario"
-                  tamanho="sm"
-                  disabled={somenteLeitura}
-                  onClick={() =>
-                    setCreditosPorAno(
-                      Object.fromEntries(anosAtivos.map((a) => [a, ctx.previsao[a] ?? 0])),
-                    )
-                  }
-                >
-                  Igualar à quantidade de alunos
-                </Botao>
-                <span className="text-xs text-gray-500">ou multiplicar os alunos por</span>
-                <Entrada
-                  type="number"
-                  min={0}
-                  step="any"
-                  inputMode="decimal"
-                  disabled={somenteLeitura}
-                  value={multiplicadorRapido}
-                  onChange={(e) => setMultiplicadorRapido(e.target.value)}
-                  placeholder="ex.: 4"
-                  className="max-w-16 px-2 py-1 text-xs"
-                  aria-label="Multiplicador para preencher todos os anos"
-                />
-                <Botao
-                  variante="secundario"
-                  tamanho="sm"
-                  disabled={
-                    somenteLeitura || !multiplicadorRapido || !Number.isFinite(Number(multiplicadorRapido))
-                  }
-                  onClick={() => {
-                    const multiplicador = Number(multiplicadorRapido);
-                    if (!Number.isFinite(multiplicador)) return;
-                    setCreditosPorAno(
-                      Object.fromEntries(
-                        anosAtivos.map((a) => [
-                          a,
-                          Math.max(0, Math.round((ctx.previsao[a] ?? 0) * multiplicador)),
-                        ]),
-                      ),
-                    );
-                  }}
-                >
-                  Aplicar a todos
-                </Botao>
-              </div>
-
               <fieldset disabled={somenteLeitura} className="flex flex-col gap-2 disabled:opacity-50">
                 {anosAtivos.map((ano) => {
                   const previsaoAno = ctx.previsao[ano] ?? 0;
                   const valor = creditosPorAno[ano];
-                  const proporcao = valor !== undefined && previsaoAno > 0 ? valor / previsaoAno : null;
+                  const textoMultiplicador = multiplicadores[ano] ?? '';
+
+                  function definirCreditos(novoValor: number) {
+                    const limpo = Math.max(0, Math.round(novoValor));
+                    setCreditosPorAno((c) => ({ ...c, [ano]: limpo }));
+                    setMultiplicadores((m) => ({
+                      ...m,
+                      [ano]:
+                        previsaoAno > 0
+                          ? (limpo / previsaoAno).toLocaleString('pt-BR', { maximumFractionDigits: 4 })
+                          : '',
+                    }));
+                  }
+
                   return (
                     <div key={ano} className="flex flex-wrap items-center gap-2.5">
                       <span className="w-24 shrink-0 text-sm text-gray-600">
@@ -476,21 +451,43 @@ export function EtapaEscolha({
                               delete copia[ano];
                               return copia;
                             });
+                            setMultiplicadores((m) => {
+                              const copia = { ...m };
+                              delete copia[ano];
+                              return copia;
+                            });
                             return;
                           }
                           const n = Number(texto);
-                          if (Number.isFinite(n)) {
-                            setCreditosPorAno((c) => ({ ...c, [ano]: Math.max(0, Math.round(n)) }));
-                          }
+                          if (Number.isFinite(n)) definirCreditos(n);
                         }}
                         className="max-w-28"
                         aria-label={`Créditos de ${anoEscolar(ano).nome}`}
                       />
-                      <span className="font-mono text-xs text-gray-400 tabular-nums">
-                        {proporcao !== null
-                          ? `${proporcao.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}× por aluno`
-                          : ''}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                        <Entrada
+                          type="number"
+                          min={0}
+                          step="any"
+                          inputMode="decimal"
+                          disabled={previsaoAno === 0}
+                          value={textoMultiplicador}
+                          onChange={(e) => {
+                            const texto = e.target.value;
+                            setMultiplicadores((m) => ({ ...m, [ano]: texto }));
+                            const n = Number(texto);
+                            if (texto !== '' && Number.isFinite(n) && previsaoAno > 0) {
+                              setCreditosPorAno((c) => ({
+                                ...c,
+                                [ano]: Math.max(0, Math.round(previsaoAno * n)),
+                              }));
+                            }
+                          }}
+                          className="w-16 shrink-0 px-2 py-1 text-xs"
+                          aria-label={`Multiplicador por aluno de ${anoEscolar(ano).nome}`}
+                        />
+                        <span className="text-xs text-gray-400">× por aluno</span>
+                      </div>
                     </div>
                   );
                 })}
