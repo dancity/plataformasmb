@@ -14,8 +14,10 @@ import { useAdmin } from './LayoutAdmin';
 
 /**
  * Cadastro de modelo, em página cheia — mesma razão da página de solução:
- * a lista de soluções pode ser longa, e não cabe bem numa caixa de altura
- * fixa.
+ * a lista de avaliações pode ser longa, e não cabe bem numa caixa de altura
+ * fixa. Nada aqui restringe a categoria das soluções escolhidas, mas na
+ * prática modelo só existe pra avaliação — é por isso que os textos falam
+ * em "avaliações" em vez de "soluções" em geral.
  */
 
 interface Rascunho {
@@ -29,7 +31,7 @@ interface Rascunho {
 const VAZIO: Rascunho = {
   nome: '',
   descricao: '',
-  categoria: '',
+  categoria: 'Avaliação',
   visibilidade: 'rascunho',
   produtoIds: [],
 };
@@ -122,7 +124,7 @@ export function ModeloForm() {
     try {
       if (!rascunho.nome.trim()) throw new Error('O modelo precisa de um nome.');
       if (rascunho.produtoIds.length === 0) {
-        throw new Error('Marque pelo menos uma solução para o modelo.');
+        throw new Error('Marque pelo menos uma avaliação para o modelo.');
       }
 
       // Mantém a ordem do catálogo — mesma sequência que o gestor vê na
@@ -136,7 +138,7 @@ export function ModeloForm() {
         cicloId: ciclo.id,
         nome: rascunho.nome.trim(),
         descricao: rascunho.descricao.trim(),
-        categoria: rascunho.categoria.trim() || 'Geral',
+        categoria: rascunho.categoria.trim() || 'Avaliação',
         visibilidade: rascunho.visibilidade,
         produtoIds,
       };
@@ -191,9 +193,10 @@ export function ModeloForm() {
           {editando ? 'Editar modelo' : 'Novo modelo'}
         </h1>
         <p className="max-w-prose text-sm text-gray-500">
-          Marque as soluções que entram juntas neste pacote. Ao aplicar o modelo, o gestor marca
-          todas de uma vez, em todos os anos habilitados para a regional dele — e continua livre
-          pra ajustar cada uma depois.
+          Marque as avaliações que entram juntas neste pacote fechado. Ao aplicar o modelo, o
+          gestor marca todas de uma vez, em todos os anos habilitados pra regional dele, puxando a
+          previsão de alunos automaticamente — e o pacote fica travado: pra ajustar qualquer
+          avaliação depois, é preciso remover o modelo inteiro, não mexer nela isolada.
         </p>
       </div>
 
@@ -208,12 +211,12 @@ export function ModeloForm() {
 
         <Campo
           rotulo="Categoria"
-          dica="Livre, só pra organizar — ex.: Avaliação, Início de ano."
+          dica='Livre, só pra organizar a lista de modelos — hoje é sempre "Avaliação".'
         >
           <Entrada
             value={rascunho.categoria}
             onChange={(e) => setRascunho({ ...rascunho, categoria: e.target.value })}
-            placeholder="Geral"
+            placeholder="Avaliação"
           />
         </Campo>
       </div>
@@ -248,7 +251,7 @@ export function ModeloForm() {
 
       <fieldset className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4">
         <legend className="px-1 text-sm font-medium text-gray-700">
-          Soluções do pacote
+          Avaliações do pacote
           <span className="ml-2 font-normal text-gray-500">
             {rascunho.produtoIds.length} selecionada{rascunho.produtoIds.length === 1 ? '' : 's'}
           </span>

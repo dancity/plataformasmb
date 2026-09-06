@@ -13,10 +13,12 @@ const SELO_VISIBILIDADE = {
 } as const;
 
 /**
- * Modelos são pacotes fechados de soluções — pensados pra avaliação em
- * geral, que quase sempre vem no mesmo combo. O gestor escolhe um modelo na
- * etapa de escolha e todas as soluções da lista entram marcadas de uma vez;
- * daqui em diante ele revisa e ajusta como quiser, solução por solução.
+ * Modelos são pacotes fechados de avaliações — na prática o único uso, ainda
+ * que nada aqui restrinja a categoria das soluções escolhidas. O gestor
+ * escolhe um modelo na etapa de escolha e todas as avaliações da lista
+ * entram marcadas de uma vez, com a previsão de alunos da unidade puxada
+ * automaticamente; dali em diante o pacote fica travado — pra ajustar
+ * qualquer coisa, o gestor remove o modelo inteiro.
  */
 export function Modelos() {
   const { ciclo } = useAdmin();
@@ -55,14 +57,14 @@ export function Modelos() {
       <EstadoVazio
         icone={<span aria-hidden="true">⌛</span>}
         titulo="Crie o ciclo antes dos modelos"
-        descricao="Modelo agrupa soluções de um ciclo específico. Volte à aba Ciclo e crie o de 2027."
+        descricao="Modelo agrupa avaliações de um ciclo específico. Volte à aba Ciclo e crie o de 2027."
       />
     );
   }
 
   if (carregando) return <EsqueletoLinhas linhas={4} />;
 
-  const nomeProduto = (id: string) => produtos.find((p) => p.id === id)?.nome ?? '(solução removida)';
+  const nomeProduto = (id: string) => produtos.find((p) => p.id === id)?.nome ?? '(avaliação removida)';
 
   return (
     <div className="flex flex-col gap-5">
@@ -70,9 +72,10 @@ export function Modelos() {
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-semibold text-brand">Modelos do ciclo {ciclo.anoAlvo}</h1>
           <p className="max-w-prose text-sm text-gray-500">
-            Um pacote fechado de soluções que o gestor aplica de uma vez — útil pra avaliação em
-            geral, que costuma vir sempre no mesmo combo. Aplicar um modelo marca cada solução da
-            lista em todos os anos habilitados; o gestor continua livre pra revisar depois.
+            Um pacote fechado de avaliações que o gestor aplica de uma vez. Aplicar um modelo marca
+            cada avaliação da lista em todos os anos habilitados, puxando a previsão de alunos da
+            unidade automaticamente — e trava o pacote: pra ajustar qualquer coisa, o gestor
+            remove o modelo inteiro, não uma avaliação isolada dele.
           </p>
         </div>
         <Botao
@@ -92,8 +95,8 @@ export function Modelos() {
       {produtos.length === 0 ? (
         <EstadoVazio
           icone={<span aria-hidden="true">📦</span>}
-          titulo="Cadastre soluções primeiro"
-          descricao="Um modelo é uma lista de soluções já existentes — cadastre o catálogo antes de montar o primeiro pacote."
+          titulo="Cadastre as avaliações primeiro"
+          descricao="Um modelo é uma lista de avaliações já existentes no catálogo — cadastre-as antes de montar o primeiro pacote."
           acao={
             <Botao variante="secundario" onClick={() => navegar('/admin/solucoes')}>
               Ir para Soluções
@@ -104,7 +107,7 @@ export function Modelos() {
         <EstadoVazio
           icone={<span aria-hidden="true">🗂️</span>}
           titulo="Nenhum modelo cadastrado"
-          descricao='Monte o primeiro pacote — por exemplo, "Avaliações padrão": diagnóstica, simulado e correção de redação juntos, prontos pro gestor aplicar de uma vez.'
+          descricao='Monte o primeiro pacote — por exemplo, "Avaliações padrão": diagnóstica, simulado e correção de redação juntos, prontas pro gestor aplicar de uma vez.'
           acao={<Botao onClick={() => navegar('/admin/modelos/novo')}>Cadastrar o primeiro</Botao>}
         />
       ) : (
@@ -120,7 +123,7 @@ export function Modelos() {
                     </Selo>
                   </div>
                   <span className="text-sm text-gray-500">
-                    {m.categoria} · {m.produtoIds.length} soluç
+                    {m.categoria} · {m.produtoIds.length} avaliaç
                     {m.produtoIds.length === 1 ? 'ão' : 'ões'}
                   </span>
                 </div>
@@ -159,17 +162,17 @@ export function Modelos() {
         aberto={!!excluindo}
         nivel="medio"
         titulo="Excluir modelo"
-        descricao="O pacote deixa de aparecer na etapa de escolha do gestor. As soluções em si continuam no catálogo — só o atalho de aplicar todas juntas some."
+        descricao="O pacote deixa de aparecer na etapa de escolha do gestor. As avaliações em si continuam no catálogo — só o atalho de aplicar todas juntas some."
         detalhe={
           excluindo && (
             <div className="flex flex-col gap-1">
               <span>
-                <strong>{excluindo.nome}</strong> · {excluindo.produtoIds.length} solução
-                {excluindo.produtoIds.length === 1 ? '' : 'ões'}
+                <strong>{excluindo.nome}</strong> · {excluindo.produtoIds.length} avaliaç
+                {excluindo.produtoIds.length === 1 ? 'ão' : 'ões'}
               </span>
               <span className="text-xs">
                 Pedidos já preenchidos a partir deste modelo não mudam — a decisão já foi gravada
-                em cada solução.
+                em cada avaliação, travada como estava. Só some o atalho de aplicar de novo.
               </span>
             </div>
           )

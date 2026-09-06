@@ -194,13 +194,16 @@ export interface DecisaoLocal {
 }
 
 /** A conta pura por trás de uma decisão — sem gravar nada. Usada tanto pelo
- * salvamento real quanto pelo escritor simulado, para os dois nunca divergirem. */
+ * salvamento real quanto pelo escritor simulado, para os dois nunca divergirem.
+ * `origemModelo`, quando presente, marca o item como vindo de um pacote
+ * fechado — é o que trava a edição solução por solução na etapa de escolha. */
 export function computarItem(
   produto: Produto,
   habilitacao: HabilitacaoResolvida,
   fornecedorNome: string,
   previsao: PrevisaoPorAno,
   decisao: DecisaoLocal,
+  origemModelo?: { id: string; nome: string },
 ): ItemPedido {
   const anos = decisao.recusado ? habilitacao.obrigatorios : anosEfetivos(habilitacao, decisao.anos);
   const previsaoEfetiva = aplicarLicencas(previsao, decisao.licencasPorAno, anos);
@@ -232,6 +235,7 @@ export function computarItem(
     ...(habilitacao.preco.base === 'credito' && decisao.creditosPorAno
       ? { creditosPorAno: decisao.creditosPorAno }
       : {}),
+    ...(origemModelo ? { origemModeloId: origemModelo.id, origemModeloNome: origemModelo.nome } : {}),
   };
 }
 
@@ -367,24 +371,45 @@ export function resolverItensDoModelo(
 
 /**
  * Grava várias decisões de uma vez, num lote só — é o que aplicar um modelo
- * faz: N soluções marcadas de uma tacada, não N idas ao servidor.
+ * faz: N soluções marcadas de uma tacada, não N idas ao servidor. Cada item
+ * sai carimbado com o modelo de origem — é o que trava a edição individual
+ * na etapa de escolha depois.
  */
 export async function aplicarModelo(
   ciclo: Ciclo,
   sessao: Sessao,
+  modelo: Pick<Modelo, 'id' | 'nome'>,
   itens: readonly ItemParaAplicar[],
 ): Promise<ItemPedido[]> {
   const pedidoId = await abrirRascunho(ciclo, sessao);
   const lote = writeBatch(db);
   const resultado: ItemPedido[] = [];
   for (const { produto, habilitacao, fornecedorNome, previsao, decisao } of itens) {
-    const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao);
+    const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao, {
+      id: modelo.id,
+      nome: modelo.nome,
+    });
     const { id: _id, ...semId } = item;
     lote.set(doc(db, 'pedidos', pedidoId, 'itens', produto.id), semId);
     resultado.push(item);
   }
   await lote.commit();
   return resultado;
+}
+
+/**
+ * Desfaz a aplicação de um modelo: apaga os itens que vieram dele, e só
+ * esses — nada aqui distingue "veio do modelo" de "o gestor decidiu igual
+ * por conta própria depois", então remover é sempre apagar de vez, nunca
+ * tentar voltar a um estado anterior que não existe. As soluções voltam a
+ * ficar sem decisão, prontas pra outro modelo ou pra escolha manual.
+ */
+export async function removerModelo(pedidoId: string, produtoIds: readonly string[]): Promise<void> {
+  const lote = writeBatch(db);
+  for (const produtoId of produtoIds) {
+    lote.delete(doc(db, 'pedidos', pedidoId, 'itens', produtoId));
+  }
+  await lote.commit();
 }
 
 // ─── Etapa 5: envio ──────────────────────────────────────────────
@@ -408,6 +433,7 @@ export interface EscritorPedido {
   abrirRascunho: typeof abrirRascunho;
   salvarDecisao: typeof salvarDecisao;
   aplicarModelo: typeof aplicarModelo;
+  removerModelo: typeof removerModelo;
   enviarPedido: typeof enviarPedido;
 }
 
@@ -416,5 +442,6 @@ export const escritorPedidoReal: EscritorPedido = {
   abrirRascunho,
   salvarDecisao,
   aplicarModelo,
+  removerModelo,
   enviarPedido,
 };

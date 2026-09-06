@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calcularLinhas, resolverItensDoModelo } from '@/lib/pedido';
+import { calcularLinhas, computarItem, resolverItensDoModelo } from '@/lib/pedido';
 import type { ContextoPedido } from '@/lib/pedido';
 import type { Ciclo, Modelo, Produto, RegraHabilitacao, Unidade } from '@dominio/tipos';
 
@@ -183,5 +183,45 @@ describe('resolverItensDoModelo', () => {
 
     expect(itens).toEqual([]);
     expect(indisponiveis).toEqual(['produto-que-nao-existe-mais']);
+  });
+});
+
+/**
+ * Um pacote de modelo é fechado: o item que sai de `aplicarModelo` precisa
+ * vir carimbado com a origem — é esse carimbo que trava a edição solução
+ * por solução na etapa de escolha. Uma decisão manual (`salvarDecisao`,
+ * que também passa por `computarItem`, só sem o 6º argumento) nunca carrega
+ * esse carimbo.
+ */
+describe('computarItem — carimbo de origem do modelo', () => {
+  const ctx = contexto();
+  const linhas = calcularLinhas(ctx, 'recife');
+  const linhaDiagnostica = linhas.find((l) => l.produto.id === 'diagnostica')!;
+
+  it('carimba origemModeloId e origemModeloNome quando aplicado via modelo', () => {
+    const item = computarItem(
+      linhaDiagnostica.produto,
+      linhaDiagnostica.habilitacao,
+      'Editora Alfa',
+      ctx.previsao,
+      { anos: linhaDiagnostica.habilitacao.opcionais, recusado: false },
+      { id: 'm1', nome: 'Avaliações padrão' },
+    );
+
+    expect(item.origemModeloId).toBe('m1');
+    expect(item.origemModeloNome).toBe('Avaliações padrão');
+  });
+
+  it('não carimba nada numa decisão manual, sem o 6º argumento', () => {
+    const item = computarItem(
+      linhaDiagnostica.produto,
+      linhaDiagnostica.habilitacao,
+      'Editora Alfa',
+      ctx.previsao,
+      { anos: linhaDiagnostica.habilitacao.opcionais, recusado: false },
+    );
+
+    expect(item.origemModeloId).toBeUndefined();
+    expect(item.origemModeloNome).toBeUndefined();
   });
 });

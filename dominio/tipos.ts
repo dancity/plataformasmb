@@ -129,13 +129,14 @@ export interface Produto {
 }
 
 /**
- * Pacote fechado de soluções, pronto pra aplicar de uma vez — pensado pra
- * avaliação em geral, que costuma vir sempre com o mesmo combo (diagnóstica +
- * simulado + redação, por exemplo). Aplicar um modelo marca, pra cada
- * produto da lista, todos os anos habilitados na regional do gestor — os
- * mesmos anos que "todo o segmento" marcaria manualmente, em cada uma delas.
- * Nenhum vínculo permanece depois: é só um atalho de preenchimento, o
- * gestor segue livre pra revisar e mudar qualquer solução uma a uma.
+ * Pacote fechado de avaliações — na prática o único uso de modelo, embora
+ * nada aqui restrinja a categoria das soluções escolhidas. Aplicar um
+ * modelo marca, pra cada produto da lista, todos os anos habilitados na
+ * regional do gestor, puxando a previsão de alunos automaticamente pra
+ * calcular o valor; nenhum ajuste fica disponível solução por solução
+ * depois. É fechado de propósito: pra mudar algo, o gestor remove o
+ * modelo inteiro (as soluções que vieram dele voltam a ficar sem decisão)
+ * e aplica de novo, ou decide manualmente.
  */
 export interface Modelo {
   id: string;
@@ -258,6 +259,16 @@ export interface ItemPedido {
   decisao: DecisaoItem;
   justificativa?: string;
   atualizadoEm: DataISO;
+  /**
+   * Presente quando este item veio de aplicar um modelo, não de decisão
+   * solução por solução — trava a edição na etapa de escolha, porque um
+   * modelo é um pacote fechado: pra ajustar, o gestor remove o modelo
+   * inteiro primeiro, não uma solução dele isolada. O nome vem junto porque
+   * o modelo pode ser renomeado ou excluído depois — o rótulo na tela não
+   * deveria mudar ou sumir sozinho.
+   */
+  origemModeloId?: string;
+  origemModeloNome?: string;
 }
 
 export type TipoEvento =

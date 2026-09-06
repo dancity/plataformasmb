@@ -64,20 +64,32 @@ export function criarEscritorSimulado(
       return item;
     },
 
-    async aplicarModelo(ciclo, sessao, itens) {
+    async aplicarModelo(ciclo, sessao, modelo, itens) {
       const id = idPedido(ciclo.id, sessao.unidadeId!);
       let resultado: ItemPedido[] = [];
       setCtx((c) => {
         if (!c) return c;
         const novosItens = new Map(c.itens);
         resultado = itens.map(({ produto, habilitacao, fornecedorNome, previsao, decisao }) => {
-          const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao);
+          const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao, {
+            id: modelo.id,
+            nome: modelo.nome,
+          });
           novosItens.set(produto.id, item);
           return item;
         });
         return { ...c, itens: novosItens, pedido: c.pedido ?? criarPedidoVazio(ciclo, sessao, id) };
       });
       return resultado;
+    },
+
+    async removerModelo(_pedidoId, produtoIds) {
+      setCtx((c) => {
+        if (!c) return c;
+        const novosItens = new Map(c.itens);
+        for (const produtoId of produtoIds) novosItens.delete(produtoId);
+        return { ...c, itens: novosItens };
+      });
     },
 
     async enviarPedido(_cicloId) {
