@@ -154,7 +154,7 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
     {
       anos: AnoEscolarId[];
       recusado: boolean;
-      creditosPorAluno?: number;
+      creditosPorAno?: PrevisaoPorAno;
       licencasPorAno?: PrevisaoPorAno;
     }
   >();
@@ -163,8 +163,12 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
     escolhas.set(doc.id, {
       anos: Array.isArray(item.anosSelecionados) ? item.anosSelecionados : [],
       recusado: item.origem === 'recusado',
-      creditosPorAluno:
-        typeof item.creditosPorAluno === 'number' ? item.creditosPorAluno : undefined,
+      // Múltiplo de crédito escolhido em cada ano — validado abaixo contra
+      // as opções do catálogo, ano a ano.
+      creditosPorAno:
+        item.creditosPorAno && typeof item.creditosPorAno === 'object'
+          ? item.creditosPorAno
+          : undefined,
       // Proposta de licenças ajustadas manualmente — vale como intenção;
       // aplicarLicencas descarta qualquer valor que não seja um inteiro
       // não negativo, então não há o que validar além disso aqui.
@@ -215,22 +219,30 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       continue;
     }
 
-    // Crédito exige que o gestor tenha escolhido um dos múltiplos que o
-    // catálogo oferece — não é número que o servidor infere sozinho, e o
-    // que o cliente mandou não vale sem bater com a lista do catálogo.
-    let creditosPorAluno: number | undefined;
+    // Crédito exige que o gestor tenha escolhido, para CADA ano marcado, um
+    // dos múltiplos que o catálogo oferece — o mesmo serviço pode gastar
+    // créditos diferentes por ano, então não basta um número só para a
+    // solução inteira, e o que o cliente mandou não vale sem bater com a
+    // lista do catálogo, ano a ano.
+    let creditosPorAno: PrevisaoPorAno | undefined;
     if (hab.preco.base === 'credito') {
       const opcoes = hab.preco.opcoesCredito ?? [];
-      const escolhido = escolha?.creditosPorAluno;
-      if (typeof escolhido !== 'number' || !opcoes.includes(escolhido)) {
+      const escolhidos: PrevisaoPorAno = {};
+      const faltaAlgumAno = anos.some((ano) => {
+        const escolhido = escolha?.creditosPorAno?.[ano];
+        if (typeof escolhido !== 'number' || !opcoes.includes(escolhido)) return true;
+        escolhidos[ano] = escolhido;
+        return false;
+      });
+      if (faltaAlgumAno) {
         pendentes.push(produto.nome);
         continue;
       }
-      creditosPorAluno = escolhido;
+      creditosPorAno = escolhidos;
     }
 
     const previsaoEfetiva = aplicarLicencas(previsao, escolha?.licencasPorAno, anos);
-    const { alunos, valorAnual } = calcularItem(hab.preco, previsaoEfetiva, anos, creditosPorAluno);
+    const { alunos, valorAnual } = calcularItem(hab.preco, previsaoEfetiva, anos, creditosPorAno);
     const alunosPorAno: Record<string, number> = {};
     for (const ano of anos) alunosPorAno[ano] = previsaoEfetiva[ano] ?? 0;
 
@@ -248,7 +260,7 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       origem: ehObrigatorio ? 'obrigatorio' : 'escolha',
       decisao: 'pendente',
       atualizadoEm: agora(),
-      ...(creditosPorAluno ? { creditosPorAluno } : {}),
+      ...(creditosPorAno ? { creditosPorAno } : {}),
     };
     lote.set(itemRef, item);
 

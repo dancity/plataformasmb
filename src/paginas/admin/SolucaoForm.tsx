@@ -399,7 +399,7 @@ export function SolucaoForm() {
           <Campo
             rotulo="Múltiplos de alunos que o gestor pode escolher"
             obrigatorio
-            dica="Serviço como correção de redação não cobra 1 crédito por aluno necessariamente. Marque as faixas que a rede negociou — o gestor escolhe uma delas na hora de contratar."
+            dica="Serviço como correção de redação não cobra 1 crédito por aluno necessariamente, e pode variar por ano escolar (mais redações na 3ª série do médio do que no fundamental, por exemplo). Marque as faixas que a rede negociou — o gestor escolhe uma para cada ano, na hora de contratar."
           >
             <div className="flex flex-wrap gap-2">
               {MULTIPLOS_CREDITO.map((multiplo) => {
@@ -429,7 +429,11 @@ export function SolucaoForm() {
           O gestor vai ler: <strong>{previaPreco}</strong>
           {rascunho.base === 'escola' && <> — marcar mais anos escolares não muda esse valor.</>}
           {rascunho.base === 'credito' && (
-            <> — e escolhe, entre {rascunho.opcoesCredito.length || 0} opção(ões), quantos créditos por aluno.</>
+            <>
+              {' '}
+              — e escolhe, entre {rascunho.opcoesCredito.length || 0} opção(ões), quantos créditos
+              por aluno em cada ano escolar.
+            </>
           )}
         </p>
       </fieldset>

@@ -17,8 +17,12 @@ export interface ContextoCalculo {
   alunos: number;
   /** Turmas alcançadas. Só usado quando base = 'turma'. */
   turmas?: number;
-  /** Múltiplo de alunos escolhido pelo gestor. Só usado quando base = 'credito'. */
-  creditosPorAluno?: number;
+  /**
+   * Total de créditos já somado ano a ano (ver `totalDeCreditos`). Não é um
+   * único multiplicador porque o múltiplo pode variar por ano escolar — só
+   * usado quando base = 'credito'.
+   */
+  creditos?: number;
 }
 
 export function calcularValorAnual(preco: Precificacao, ctx: ContextoCalculo): Centavos {
@@ -45,13 +49,30 @@ export function quantidadeCobravel(preco: Precificacao, ctx: ContextoCalculo): n
       // Piso contratual: abaixo do mínimo, cobra-se o mínimo.
       return preco.minimoAlunos ? Math.max(ctx.alunos, preco.minimoAlunos) : ctx.alunos;
     }
-    case 'credito': {
-      // Sem o gestor ter escolhido um múltiplo, não há o que cobrar — é
-      // decisão dele, não um número que o catálogo já traz pronto.
-      if (ctx.alunos <= 0 || !ctx.creditosPorAluno) return 0;
-      return Math.round(ctx.alunos * ctx.creditosPorAluno);
-    }
+    case 'credito':
+      // Sem crédito somado, não há o que cobrar — é decisão do gestor, ano a
+      // ano, não um número que o catálogo já traz pronto.
+      return ctx.creditos ?? 0;
   }
+}
+
+/**
+ * Soma, ano a ano, alunos × múltiplo de créditos daquele ano — nunca um
+ * multiplicador só para a solução inteira. O mesmo serviço gasta créditos
+ * diferentes por ano (poucas redações corrigidas no fundamental, muitas na
+ * 3ª série do médio), e é assim que a rede negocia: por ano, não por aluno
+ * solto.
+ */
+export function totalDeCreditos(
+  previsao: PrevisaoPorAno,
+  anos: readonly AnoEscolarId[],
+  creditosPorAno: PrevisaoPorAno,
+): number {
+  return anos.reduce((soma, ano) => {
+    const multiplo = creditosPorAno[ano];
+    if (!multiplo) return soma;
+    return soma + Math.round((previsao[ano] ?? 0) * multiplo);
+  }, 0);
 }
 
 /** Calcula direto a partir da previsão e dos anos marcados. */
@@ -59,10 +80,12 @@ export function calcularItem(
   preco: Precificacao,
   previsao: PrevisaoPorAno,
   anosSelecionados: readonly AnoEscolarId[],
-  creditosPorAluno?: number,
-): { alunos: number; valorAnual: Centavos } {
+  creditosPorAno?: PrevisaoPorAno,
+): { alunos: number; creditos: number; valorAnual: Centavos } {
   const alunos = alunosNosAnos(previsao, anosSelecionados);
-  return { alunos, valorAnual: calcularValorAnual(preco, { alunos, creditosPorAluno }) };
+  const creditos =
+    preco.base === 'credito' ? totalDeCreditos(previsao, anosSelecionados, creditosPorAno ?? {}) : 0;
+  return { alunos, creditos, valorAnual: calcularValorAnual(preco, { alunos, creditos }) };
 }
 
 // ─── Apresentação ────────────────────────────────────────────────

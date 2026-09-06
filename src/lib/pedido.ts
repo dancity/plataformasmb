@@ -178,8 +178,12 @@ export async function abrirRascunho(ciclo: Ciclo, sessao: Sessao): Promise<strin
 export interface DecisaoLocal {
   anos: AnoEscolarId[];
   recusado: boolean;
-  /** Só quando a solução é cobrada por crédito: o múltiplo de alunos escolhido. */
-  creditosPorAluno?: number;
+  /**
+   * Só quando a solução é cobrada por crédito: o múltiplo escolhido em cada
+   * ano — o mesmo serviço pode gastar mais créditos por aluno num ano do
+   * que em outro, então não é um número só para a solução inteira.
+   */
+  creditosPorAno?: PrevisaoPorAno;
   /**
    * Quantidade de licenças ajustada manualmente, um ano de cada vez — só
    * entra quando o gestor mexeu; ano ausente aqui segue a previsão normal.
@@ -202,7 +206,7 @@ export function computarItem(
     habilitacao.preco,
     previsaoEfetiva,
     anos,
-    decisao.creditosPorAluno,
+    decisao.creditosPorAno,
   );
 
   const alunosPorAno: PrevisaoPorAno = {};
@@ -223,8 +227,8 @@ export function computarItem(
       anos.length === 0 ? 'recusado' : habilitacao.obrigatorios.length > 0 ? 'obrigatorio' : 'escolha',
     decisao: 'pendente',
     atualizadoEm: new Date().toISOString(),
-    ...(habilitacao.preco.base === 'credito' && decisao.creditosPorAluno
-      ? { creditosPorAluno: decisao.creditosPorAluno }
+    ...(habilitacao.preco.base === 'credito' && decisao.creditosPorAno
+      ? { creditosPorAno: decisao.creditosPorAno }
       : {}),
   };
 }

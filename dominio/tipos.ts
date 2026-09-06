@@ -109,10 +109,11 @@ export interface Precificacao {
   /** Piso de cobrança: abaixo disso, cobra-se como se fosse este número. */
   minimoAlunos?: number;
   /**
-   * Só quando base = 'credito': os múltiplos do total de alunos que o
-   * gestor pode escolher (ex.: 0.5, 1, 2 — 1 crédito por aluno, meio
-   * crédito por aluno). Serviço como correção de redação não cobra 1:1
-   * por aluno, mas também não é livre — a rede negociou faixas.
+   * Só quando base = 'credito': os múltiplos de alunos que o gestor pode
+   * escolher, ano escolar por ano escolar (ex.: 4, 6, 8 — quatro redações
+   * corrigidas por aluno no fundamental, oito na 3ª série do médio). Não é
+   * livre — a rede negociou faixas, e o gestor escolhe entre elas, um ano
+   * de cada vez.
    */
   opcoesCredito?: number[];
 }
@@ -228,8 +229,13 @@ export interface ItemPedido {
   /** Cópia da previsão usada no cálculo — congelada no envio. */
   alunosPorAno: PrevisaoPorAno;
   alunosTotal: number;
-  /** Só quando a solução é cobrada por crédito: o múltiplo de alunos escolhido. */
-  creditosPorAluno?: number;
+  /**
+   * Só quando a solução é cobrada por crédito: o múltiplo escolhido em cada
+   * ano escolar — o mesmo serviço pode gastar mais créditos por aluno num
+   * ano do que em outro (redação corrigida: poucas no fundamental, muitas
+   * no 3º do médio), então não é um número só para a solução inteira.
+   */
+  creditosPorAno?: PrevisaoPorAno;
   /** Cópia do preço vigente no envio. Corrigir o catálogo depois não mexe aqui. */
   precoSnapshot: Precificacao;
   valorAnual: Centavos;
