@@ -107,3 +107,25 @@ export function alunosNosAnos(previsao: PrevisaoPorAno, anos: readonly AnoEscola
 export function anosOfertados(previsao: PrevisaoPorAno): AnoEscolarId[] {
   return ANOS_ESCOLARES.filter((a) => (previsao[a.id] ?? 0) > 0).map((a) => a.id);
 }
+
+/**
+ * Sobrepõe a previsão com uma quantidade de licenças ajustada manualmente,
+ * um ano de cada vez — só para os anos informados, e só quando o valor é um
+ * inteiro não negativo válido. Existe para uma solução poder ser contratada
+ * para um número de licenças diferente do total matriculado (comprar menos
+ * licenças que alunos, por exemplo). Roda nos dois lados — cliente e
+ * Cloud Function — para o preço nunca divergir.
+ */
+export function aplicarLicencas(
+  previsao: PrevisaoPorAno,
+  licencas: PrevisaoPorAno | undefined,
+  anos: readonly AnoEscolarId[],
+): PrevisaoPorAno {
+  if (!licencas) return previsao;
+  const efetiva: PrevisaoPorAno = { ...previsao };
+  for (const ano of anos) {
+    const n = licencas[ano];
+    if (typeof n === 'number' && Number.isInteger(n) && n >= 0) efetiva[ano] = n;
+  }
+  return efetiva;
+}

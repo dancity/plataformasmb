@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Botao, Cartao, EstadoVazio, Selo, juntar } from '@/componentes/ui';
+import { Botao, Cartao, Entrada, EstadoVazio, Selo, juntar } from '@/componentes/ui';
 import type { Sessao } from '@/lib/auth';
 import { calcularLinhas, somarTotais } from '@/lib/pedido';
 import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
-import { SEGMENTOS, anosDoSegmento, ordenarAnos } from '@dominio/anosEscolares';
-import type { AnoEscolarId } from '@dominio/anosEscolares';
+import { SEGMENTOS, anoEscolar, anosDoSegmento, aplicarLicencas, ordenarAnos } from '@dominio/anosEscolares';
+import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
 import { calcularItem, descreverPreco, formatarBRL, rotularMultiploCredito } from '@dominio/preco';
 
 /**
@@ -44,6 +44,9 @@ export function EtapaEscolha({
   const [marcados, setMarcados] = useState<Set<AnoEscolarId>>(new Set());
   const [recusado, setRecusado] = useState(false);
   const [creditosEscolhido, setCreditosEscolhido] = useState<number | null>(null);
+  // Licenças ajustadas manualmente, ano a ano — ausente aqui segue a previsão.
+  const [licencas, setLicencas] = useState<PrevisaoPorAno>({});
+  const [ajustarLicencas, setAjustarLicencas] = useState(false);
 
   const atual: LinhaCalculada | undefined = linhas[indice];
 
@@ -56,6 +59,16 @@ export function EtapaEscolha({
     setMarcados(new Set(opcionaisMarcados));
     setRecusado(atual.item?.origem === 'recusado');
     setCreditosEscolhido(atual.item?.creditosPorAluno ?? null);
+
+    // Só guarda o que realmente diverge da previsão — o resto segue normal.
+    const divergentes: PrevisaoPorAno = {};
+    for (const [ano, qtd] of Object.entries(atual.item?.alunosPorAno ?? {})) {
+      const anoId = ano as AnoEscolarId;
+      if (qtd !== (ctx.previsao[anoId] ?? 0)) divergentes[anoId] = qtd;
+    }
+    setLicencas(divergentes);
+    setAjustarLicencas(Object.keys(divergentes).length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [atual]);
 
   const precisaEscolherCredito =
@@ -64,13 +77,33 @@ export function EtapaEscolha({
     !recusado &&
     (atual.habilitacao.obrigatorios.length > 0 || marcados.size > 0);
 
-  const previa = useMemo(() => {
-    if (!atual) return { alunos: 0, valorAnual: 0 };
-    const anos = recusado
+  // Os anos que valem para esta solução agora — obrigatórios sempre, mais o
+  // que foi marcado, na ordem pedagógica.
+  const anosAtivos = useMemo(() => {
+    if (!atual) return [];
+    return recusado
       ? atual.habilitacao.obrigatorios
       : ordenarAnos([...atual.habilitacao.obrigatorios, ...marcados]);
-    return calcularItem(atual.habilitacao.preco, ctx.previsao, anos, creditosEscolhido ?? undefined);
-  }, [atual, marcados, recusado, creditosEscolhido, ctx.previsao]);
+  }, [atual, marcados, recusado]);
+
+  const permiteLicencas =
+    !!atual && (atual.habilitacao.preco.base === 'aluno' || atual.habilitacao.preco.base === 'credito');
+
+  const previsaoEfetiva = useMemo(
+    () => aplicarLicencas(ctx.previsao, permiteLicencas ? licencas : undefined, anosAtivos),
+    [ctx.previsao, permiteLicencas, licencas, anosAtivos],
+  );
+
+  const previa = useMemo(() => {
+    if (!atual) return { alunos: 0, valorAnual: 0 };
+    return calcularItem(atual.habilitacao.preco, previsaoEfetiva, anosAtivos, creditosEscolhido ?? undefined);
+  }, [atual, anosAtivos, previsaoEfetiva, creditosEscolhido]);
+
+  const alunosPrevistos = useMemo(
+    () => anosAtivos.reduce((s, ano) => s + (ctx.previsao[ano] ?? 0), 0),
+    [anosAtivos, ctx.previsao],
+  );
+  const licencasDivergem = permiteLicencas && previa.alunos !== alunosPrevistos;
 
   const totais = useMemo(() => somarTotais(linhas), [linhas]);
   const decididas = linhas.filter((l) => l.decidida).length;
@@ -92,7 +125,12 @@ export function EtapaEscolha({
           atual.habilitacao,
           ctx.fornecedores.get(atual.produto.fornecedorId) ?? '',
           ctx.previsao,
-          { anos: [...marcados], recusado, creditosPorAluno: creditosEscolhido ?? undefined },
+          {
+            anos: [...marcados],
+            recusado,
+            creditosPorAluno: creditosEscolhido ?? undefined,
+            licencasPorAno: permiteLicencas && Object.keys(licencas).length > 0 ? licencas : undefined,
+          },
         );
         await aoSalvar();
         if (proximo) {
@@ -113,6 +151,8 @@ export function EtapaEscolha({
       marcados,
       recusado,
       creditosEscolhido,
+      permiteLicencas,
+      licencas,
       precisaEscolherCredito,
       indice,
       linhas.length,
@@ -250,7 +290,7 @@ export function EtapaEscolha({
                   <span className="text-sm text-gray-500">{seg.nome}</span>
                   {anosSeg.length === 0 ? (
                     <span className="text-sm text-gray-400 italic">
-                      não habilitada para este segmento na sua regional
+                      não habilitada para este segmento
                     </span>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2">
@@ -272,16 +312,30 @@ export function EtapaEscolha({
                               })
                             }
                             className={juntar(
-                              'h-11 min-w-11 rounded-lg border px-3 text-sm transition-colors',
+                              'flex min-w-14 flex-col items-center gap-0.5 rounded-xl border px-3 py-1.5 transition-all duration-150',
                               travado
-                                ? 'cursor-default border-orange-300 bg-orange-100 font-medium text-orange-800'
+                                ? 'cursor-default border-orange-300 bg-orange-100'
                                 : ligado
-                                  ? 'border-brand-medium bg-brand-medium font-medium text-white'
-                                  : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400',
+                                  ? 'border-brand-medium bg-brand-medium shadow-sm'
+                                  : 'border-gray-200 bg-white hover:-translate-y-px hover:border-gray-300 hover:shadow-sm',
                             )}
-                            title={`${ano.nome} · ${ctx.previsao[ano.id] ?? 0} alunos`}
                           >
-                            {ano.curto}
+                            <span
+                              className={juntar(
+                                'text-sm font-medium',
+                                travado ? 'text-orange-800' : ligado ? 'text-white' : 'text-gray-700',
+                              )}
+                            >
+                              {ano.curto}
+                            </span>
+                            <span
+                              className={juntar(
+                                'font-mono text-[10px] tabular-nums',
+                                travado ? 'text-orange-700/80' : ligado ? 'text-white/75' : 'text-gray-400',
+                              )}
+                            >
+                              {ctx.previsao[ano.id] ?? 0}
+                            </span>
                           </button>
                         );
                       })}
@@ -319,6 +373,85 @@ export function EtapaEscolha({
           {habilitacao.preco.base === 'escola' && (
             <p className="text-xs text-gray-500">
               Cobrança por unidade: marcar mais anos escolares não altera o valor.
+            </p>
+          )}
+
+          {permiteLicencas && anosAtivos.length > 0 && (
+            <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3.5">
+              <button
+                type="button"
+                onClick={() => setAjustarLicencas((v) => !v)}
+                aria-expanded={ajustarLicencas}
+                className="flex flex-wrap items-center gap-2 text-left text-sm font-medium text-gray-700"
+              >
+                <span aria-hidden="true" className="w-3 text-xs text-gray-400">
+                  {ajustarLicencas ? '▾' : '▸'}
+                </span>
+                Ajustar quantidade de licenças
+                {licencasDivergem && <Selo tom="atencao">diferente da previsão</Selo>}
+              </button>
+
+              {ajustarLicencas && (
+                <div className="flex flex-col gap-2.5 pl-5">
+                  <p className="text-xs text-gray-500">
+                    Por padrão a quantidade de licenças segue a previsão de alunos. Mude aqui só se
+                    esta solução cobrir menos — ou mais — alunos do que o total matriculado no ano.
+                  </p>
+                  <fieldset disabled={somenteLeitura} className="flex flex-col gap-2">
+                    {anosAtivos.map((ano) => {
+                      const previsaoAno = ctx.previsao[ano] ?? 0;
+                      const valor = licencas[ano] ?? previsaoAno;
+                      const divergente = licencas[ano] !== undefined && licencas[ano] !== previsaoAno;
+                      return (
+                        <div key={ano} className="flex flex-wrap items-center gap-2.5">
+                          <span className="w-28 shrink-0 text-sm text-gray-600">
+                            {anoEscolar(ano).nome}
+                          </span>
+                          <Entrada
+                            type="number"
+                            min={0}
+                            inputMode="numeric"
+                            value={valor}
+                            onChange={(e) => {
+                              const n = Number(e.target.value);
+                              const limpo = Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+                              setLicencas((l) => ({ ...l, [ano]: limpo }));
+                            }}
+                            className="max-w-24"
+                            aria-label={`Licenças de ${anoEscolar(ano).nome}`}
+                          />
+                          <span className="font-mono text-xs text-gray-400 tabular-nums">
+                            previsão: {previsaoAno}
+                          </span>
+                          {divergente && !somenteLeitura && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLicencas((l) => {
+                                  const copia = { ...l };
+                                  delete copia[ano];
+                                  return copia;
+                                })
+                              }
+                              className="text-xs text-brand-medium hover:underline"
+                            >
+                              usar previsão
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </fieldset>
+                </div>
+              )}
+            </div>
+          )}
+
+          {licencasDivergem && (
+            <p className="rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-800">
+              Você está contratando licenças para <strong>{previa.alunos}</strong> aluno
+              {previa.alunos === 1 ? '' : 's'} — a previsão para os anos marcados soma{' '}
+              <strong>{alunosPrevistos}</strong>.
             </p>
           )}
 

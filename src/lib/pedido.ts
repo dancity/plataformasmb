@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
+import { aplicarLicencas } from '@dominio/anosEscolares';
 import { calcularItem } from '@dominio/preco';
 import { anosEfetivos, resolverHabilitacao } from '@dominio/habilitacao';
 import type { HabilitacaoResolvida } from '@dominio/habilitacao';
@@ -179,6 +180,11 @@ export interface DecisaoLocal {
   recusado: boolean;
   /** Só quando a solução é cobrada por crédito: o múltiplo de alunos escolhido. */
   creditosPorAluno?: number;
+  /**
+   * Quantidade de licenças ajustada manualmente, um ano de cada vez — só
+   * entra quando o gestor mexeu; ano ausente aqui segue a previsão normal.
+   */
+  licencasPorAno?: PrevisaoPorAno;
 }
 
 /** A conta pura por trás de uma decisão — sem gravar nada. Usada tanto pelo
@@ -191,15 +197,16 @@ export function computarItem(
   decisao: DecisaoLocal,
 ): ItemPedido {
   const anos = decisao.recusado ? habilitacao.obrigatorios : anosEfetivos(habilitacao, decisao.anos);
+  const previsaoEfetiva = aplicarLicencas(previsao, decisao.licencasPorAno, anos);
   const { alunos, valorAnual } = calcularItem(
     habilitacao.preco,
-    previsao,
+    previsaoEfetiva,
     anos,
     decisao.creditosPorAluno,
   );
 
   const alunosPorAno: PrevisaoPorAno = {};
-  for (const ano of anos) alunosPorAno[ano] = previsao[ano] ?? 0;
+  for (const ano of anos) alunosPorAno[ano] = previsaoEfetiva[ano] ?? 0;
 
   return {
     id: produto.id,

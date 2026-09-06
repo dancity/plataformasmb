@@ -1,5 +1,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import type { AnoEscolarId } from '../../dominio/anosEscolares';
+import type { AnoEscolarId, PrevisaoPorAno } from '../../dominio/anosEscolares';
+import { aplicarLicencas } from '../../dominio/anosEscolares';
 import { calcularItem } from '../../dominio/preco';
 import { anosEfetivos, resolverHabilitacao } from '../../dominio/habilitacao';
 import type {
@@ -150,7 +151,12 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   // decide são as regras de habilitação, aqui no servidor.
   const escolhas = new Map<
     string,
-    { anos: AnoEscolarId[]; recusado: boolean; creditosPorAluno?: number }
+    {
+      anos: AnoEscolarId[];
+      recusado: boolean;
+      creditosPorAluno?: number;
+      licencasPorAno?: PrevisaoPorAno;
+    }
   >();
   for (const doc of itensSnap.docs) {
     const item = doc.data() as ItemPedido;
@@ -159,6 +165,11 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       recusado: item.origem === 'recusado',
       creditosPorAluno:
         typeof item.creditosPorAluno === 'number' ? item.creditosPorAluno : undefined,
+      // Proposta de licenças ajustadas manualmente — vale como intenção;
+      // aplicarLicencas descarta qualquer valor que não seja um inteiro
+      // não negativo, então não há o que validar além disso aqui.
+      licencasPorAno:
+        item.alunosPorAno && typeof item.alunosPorAno === 'object' ? item.alunosPorAno : undefined,
     });
   }
 
@@ -218,9 +229,10 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       creditosPorAluno = escolhido;
     }
 
-    const { alunos, valorAnual } = calcularItem(hab.preco, previsao, anos, creditosPorAluno);
+    const previsaoEfetiva = aplicarLicencas(previsao, escolha?.licencasPorAno, anos);
+    const { alunos, valorAnual } = calcularItem(hab.preco, previsaoEfetiva, anos, creditosPorAluno);
     const alunosPorAno: Record<string, number> = {};
-    for (const ano of anos) alunosPorAno[ano] = previsao[ano] ?? 0;
+    for (const ano of anos) alunosPorAno[ano] = previsaoEfetiva[ano] ?? 0;
 
     const ehObrigatorio = hab.obrigatorios.length > 0;
     const item: Omit<ItemPedido, 'id'> = {

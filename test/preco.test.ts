@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrevisaoPorAno } from '../dominio/anosEscolares';
-import { alunosNosAnos, anosOfertados, totalDeAlunos } from '../dominio/anosEscolares';
+import { alunosNosAnos, anosOfertados, aplicarLicencas, totalDeAlunos } from '../dominio/anosEscolares';
 import { calcularItem, calcularValorAnual, descreverPreco, reaisParaCentavos } from '../dominio/preco';
 import type { Precificacao } from '../dominio/tipos';
 
@@ -38,6 +38,48 @@ describe('previsão de alunos', () => {
     const ofertados = anosOfertados(semMedio);
     expect(ofertados).toContain('EF9');
     expect(ofertados).not.toContain('EM1');
+  });
+});
+
+describe('licenças ajustadas manualmente', () => {
+  it('sem ajuste nenhum, a previsão sai intacta', () => {
+    expect(aplicarLicencas(PREVISAO, undefined, ANOS_INICIAIS)).toEqual(PREVISAO);
+  });
+
+  it('sobrepõe só os anos ajustados, mantendo o resto da previsão', () => {
+    const efetiva = aplicarLicencas(PREVISAO, { EF1: 50 }, ANOS_INICIAIS);
+    expect(efetiva.EF1).toBe(50);
+    expect(efetiva.EF2).toBe(PREVISAO.EF2); // não mexeu, continua a previsão
+  });
+
+  it('ignora ajuste para um ano fora da lista de anos considerados', () => {
+    const efetiva = aplicarLicencas(PREVISAO, { EM1: 999 }, ANOS_INICIAIS);
+    expect(efetiva.EM1).toBe(PREVISAO.EM1); // EM1 não está em ANOS_INICIAIS
+  });
+
+  it('descarta valor negativo, fracionário ou não numérico — cai na previsão', () => {
+    const efetiva = aplicarLicencas(
+      PREVISAO,
+      { EF1: -5, EF2: 10.5, EF3: Number.NaN },
+      ANOS_INICIAIS,
+    );
+    expect(efetiva.EF1).toBe(PREVISAO.EF1);
+    expect(efetiva.EF2).toBe(PREVISAO.EF2);
+    expect(efetiva.EF3).toBe(PREVISAO.EF3);
+  });
+
+  it('zero licenças é um ajuste válido — a solução some do cálculo daquele ano', () => {
+    const efetiva = aplicarLicencas(PREVISAO, { EF1: 0 }, ANOS_INICIAIS);
+    expect(efetiva.EF1).toBe(0);
+  });
+
+  it('muda o total cobrado quando a solução é por aluno', () => {
+    const preco: Precificacao = { base: 'aluno', ciclo: 'anual', valor: 1000, meses: 12 };
+    const previsaoEfetiva = aplicarLicencas(PREVISAO, { EF1: 50 }, ANOS_INICIAIS);
+    const { alunos, valorAnual } = calcularItem(preco, previsaoEfetiva, ANOS_INICIAIS);
+    // 440 - 88 (previsão real do EF1) + 50 (licenças ajustadas) = 402
+    expect(alunos).toBe(402);
+    expect(valorAnual).toBe(1000 * 402);
   });
 });
 
