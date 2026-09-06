@@ -18,6 +18,7 @@ import type {
   Ciclo,
   EstadoCiclo,
   Fornecedor,
+  ItemModelo,
   Modelo,
   Obrigatoriedade,
   Produto,
@@ -25,6 +26,7 @@ import type {
   RegraHabilitacao,
   Unidade,
 } from '@dominio/tipos';
+import { ANOS_ESCOLARES } from '@dominio/anosEscolares';
 import { db } from './firebase';
 
 /**
@@ -289,12 +291,33 @@ export async function excluirTodosProdutos(cicloId: string): Promise<number> {
 
 // ─── Modelos ─────────────────────────────────────────────────────
 
+/**
+ * Lê um documento de modelo tolerando o formato anterior à mudança que deu a
+ * cada avaliação seus próprios anos escolares (`produtoIds: string[]` virou
+ * `itens: ItemModelo[]`). Só na leitura — nunca grava de volta no formato
+ * velho. Um modelo migrado assim nasce marcado em todos os anos em cada
+ * avaliação; abrir pra editar e ajustar é o caminho normal a partir daí.
+ */
+function paraModelo(id: string, data: Record<string, unknown>): Modelo {
+  const bruto = data as Omit<Modelo, 'id' | 'itens'> & {
+    itens?: ItemModelo[];
+    produtoIds?: string[];
+  };
+  const itens: ItemModelo[] =
+    bruto.itens ??
+    (bruto.produtoIds ?? []).map((produtoId) => ({
+      produtoId,
+      anos: ANOS_ESCOLARES.map((a) => a.id),
+    }));
+  return { ...bruto, id, itens };
+}
+
 /** Todos os modelos do ciclo, qualquer visibilidade — uso do admin. */
 export async function listarModelos(cicloId: string): Promise<Modelo[]> {
   const snap = await getDocs(
     query(collection(db, 'modelos'), where('cicloId', '==', cicloId), orderBy('nome')),
   );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Modelo);
+  return snap.docs.map((d) => paraModelo(d.id, d.data()));
 }
 
 /** Só os publicados — o que a etapa de escolha do gestor oferece. */
@@ -307,12 +330,12 @@ export async function listarModelosPublicados(cicloId: string): Promise<Modelo[]
       orderBy('nome'),
     ),
   );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Modelo);
+  return snap.docs.map((d) => paraModelo(d.id, d.data()));
 }
 
 export async function obterModelo(id: string): Promise<Modelo | null> {
   const snap = await getDoc(doc(db, 'modelos', id));
-  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Modelo) : null;
+  return snap.exists() ? paraModelo(snap.id, snap.data()) : null;
 }
 
 export type DadosModelo = Omit<Modelo, 'id' | 'criadoEm' | 'atualizadoEm'>;
