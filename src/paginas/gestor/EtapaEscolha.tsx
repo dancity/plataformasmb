@@ -130,9 +130,25 @@ export function EtapaEscolha({
   const totais = useMemo(() => somarTotais(linhas), [linhas]);
   const decididas = linhas.filter((l) => l.decidida).length;
 
+  // Pra onde ir depois de gravar — índice de outra solução (clique na lista
+  // lateral inclusive), a etapa seguinte (mapa) ou a etapa anterior
+  // (previsão). null significa "só grava, sem navegar".
+  type Destino = number | 'avancar' | 'voltar' | null;
+
   const gravar = useCallback(
-    async (proximo: boolean) => {
-      if (!atual || somenteLeitura) return;
+    async (destino: Destino) => {
+      const navegar = () => {
+        if (destino === null) return;
+        if (typeof destino === 'number') setIndice(destino);
+        else if (destino === 'avancar') aoAvancar();
+        else aoVoltar();
+      };
+
+      // Sem nada pra gravar (etapa fechada ou pedido já enviado) — só navega.
+      if (!atual || somenteLeitura) {
+        navegar();
+        return;
+      }
       if (precisaEscolherCredito) {
         setErro('Digite a quantidade de créditos de cada ano marcado antes de continuar.');
         return;
@@ -155,10 +171,7 @@ export function EtapaEscolha({
           },
         );
         await aoSalvar();
-        if (proximo) {
-          if (indice < linhas.length - 1) setIndice(indice + 1);
-          else aoAvancar();
-        }
+        navegar();
       } catch {
         setErro('Não foi possível salvar esta decisão. Tente de novo.');
       } finally {
@@ -176,11 +189,10 @@ export function EtapaEscolha({
       permiteLicencas,
       licencas,
       precisaEscolherCredito,
-      indice,
-      linhas.length,
       somenteLeitura,
       aoSalvar,
       aoAvancar,
+      aoVoltar,
     ],
   );
 
@@ -221,9 +233,11 @@ export function EtapaEscolha({
             <button
               key={l.produto.id}
               type="button"
-              onClick={() => setIndice(i)}
+              disabled={salvando}
+              onClick={() => void gravar(i)}
               className={juntar(
                 'flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors',
+                'disabled:cursor-not-allowed disabled:opacity-50',
                 i === indice
                   ? 'bg-gray-100 font-medium text-gray-900'
                   : 'text-gray-500 hover:bg-gray-100',
@@ -638,8 +652,8 @@ export function EtapaEscolha({
 
           <Botao
             variante="secundario"
-            onClick={() => (indice > 0 ? setIndice(indice - 1) : aoVoltar())}
-            disabled={salvando}
+            carregando={salvando}
+            onClick={() => void gravar(indice > 0 ? indice - 1 : 'voltar')}
           >
             Voltar
           </Botao>
@@ -649,7 +663,7 @@ export function EtapaEscolha({
             <Botao
               carregando={salvando}
               disabled={precisaEscolherCredito}
-              onClick={() => void gravar(true)}
+              onClick={() => void gravar(indice < linhas.length - 1 ? indice + 1 : 'avancar')}
             >
               {indice < linhas.length - 1 ? 'Próxima solução' : 'Ver o mapa'}
             </Botao>
