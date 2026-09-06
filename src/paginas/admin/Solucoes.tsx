@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DialogoConfirmacao } from '@/componentes/Modal';
 import { Botao, Cartao, EsqueletoLinhas, EstadoVazio, Selo } from '@/componentes/ui';
 import {
+  duplicarProduto,
   excluirProduto,
   excluirTodosProdutos,
   listarFornecedores,
@@ -30,6 +31,19 @@ export function Solucoes() {
   const [apagando, setApagando] = useState(false);
   const [excluindoTudo, setExcluindoTudo] = useState(false);
   const [apagandoTudo, setApagandoTudo] = useState(false);
+  const [duplicando, setDuplicando] = useState<string | null>(null);
+
+  const duplicar = useCallback(
+    (produtoId: string) => {
+      setErro(null);
+      setDuplicando(produtoId);
+      void duplicarProduto(produtoId)
+        .then((novoId) => navegar(`/admin/solucoes/${novoId}/editar`))
+        .catch(() => setErro('Não foi possível duplicar. Tente de novo.'))
+        .finally(() => setDuplicando(null));
+    },
+    [navegar],
+  );
 
   const carregar = useCallback(async () => {
     if (!ciclo) {
@@ -143,6 +157,15 @@ export function Solucoes() {
                     onClick={() => navegar(`/admin/solucoes/${p.id}/editar`)}
                   >
                     Editar
+                  </Botao>
+                  <Botao
+                    variante="secundario"
+                    tamanho="sm"
+                    carregando={duplicando === p.id}
+                    disabled={duplicando !== null && duplicando !== p.id}
+                    onClick={() => duplicar(p.id)}
+                  >
+                    Duplicar
                   </Botao>
                   <Botao variante="fantasma" tamanho="sm" onClick={() => setExcluindo(p)}>
                     Excluir

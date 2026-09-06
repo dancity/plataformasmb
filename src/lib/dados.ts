@@ -214,6 +214,38 @@ export async function atualizarProduto(id: string, dados: Partial<DadosProduto>)
   await updateDoc(doc(db, 'produtos', id), { ...dados, atualizadoEm: new Date().toISOString() });
 }
 
+/**
+ * Duplica um produto inteiro — dados e grade de habilitação — para servir de
+ * ponto de partida numa solução parecida. Sai como rascunho mesmo que o
+ * original esteja publicado: cópia não deve aparecer para o gestor até
+ * alguém revisar nome, preço e fornecedor.
+ */
+export async function duplicarProduto(id: string): Promise<string> {
+  const original = await obterProduto(id);
+  if (!original) throw new Error('Solução não encontrada.');
+  const regras = await getDocs(collection(db, 'produtos', id, 'regras'));
+
+  const agora = new Date().toISOString();
+  const { id: _id, criadoEm: _criadoEm, atualizadoEm: _atualizadoEm, ...dados } = original;
+  const ref = await addDoc(collection(db, 'produtos'), {
+    ...dados,
+    nome: `${original.nome} (cópia)`,
+    visibilidade: 'rascunho',
+    criadoEm: agora,
+    atualizadoEm: agora,
+  });
+
+  if (!regras.empty) {
+    const lote = writeBatch(db);
+    for (const r of regras.docs) {
+      lote.set(doc(db, 'produtos', ref.id, 'regras', r.id), { ...r.data(), produtoId: ref.id });
+    }
+    await lote.commit();
+  }
+
+  return ref.id;
+}
+
 export async function excluirProduto(id: string): Promise<void> {
   // As regras vão junto: subcoleção órfã continuaria habilitando um produto
   // que não existe mais.
