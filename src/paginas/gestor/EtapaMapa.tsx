@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { DialogoConfirmacao } from '@/componentes/Modal';
 import { Botao, Cartao, Selo, juntar } from '@/componentes/ui';
 import type { Sessao } from '@/lib/auth';
-import { calcularLinhas, enviarPedido, somarTotais } from '@/lib/pedido';
-import type { ContextoPedido, LinhaCalculada } from '@/lib/pedido';
+import { calcularLinhas, somarTotais } from '@/lib/pedido';
+import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
 import { SEGMENTOS, anosDoSegmento } from '@dominio/anosEscolares';
 import type { AnoEscolarId, SegmentoId } from '@dominio/anosEscolares';
 import { formatarBRL, formatarBRLcurto } from '@dominio/preco';
@@ -22,12 +22,14 @@ export function EtapaMapa({
   ctx,
   sessao,
   somenteLeitura,
+  escritor,
   aoVoltar,
   aoSalvar,
 }: {
   ctx: ContextoPedido;
   sessao: Sessao;
   somenteLeitura: boolean;
+  escritor: EscritorPedido;
   aoVoltar: () => void;
   aoSalvar: () => Promise<void>;
 }) {
@@ -73,7 +75,7 @@ export function EtapaMapa({
     setEnviando(true);
     setErro(null);
     try {
-      await enviarPedido(ctx.ciclo.id);
+      await escritor.enviarPedido(ctx.ciclo.id);
       await aoSalvar();
     } catch (e) {
       const codigo = (e as { code?: string }).code ?? '';

@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Botao, Cartao, Entrada, Selo } from '@/componentes/ui';
 import type { Sessao } from '@/lib/auth';
-import { salvarPrevisao } from '@/lib/pedido';
-import type { ContextoPedido } from '@/lib/pedido';
+import type { ContextoPedido, EscritorPedido } from '@/lib/pedido';
 import { SEGMENTOS, anosDoSegmento, totalDeAlunos } from '@dominio/anosEscolares';
 import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
 
@@ -18,12 +17,14 @@ export function EtapaPrevisao({
   ctx,
   sessao,
   somenteLeitura,
+  escritor,
   aoAvancar,
   aoSalvar,
 }: {
   ctx: ContextoPedido;
   sessao: Sessao;
   somenteLeitura: boolean;
+  escritor: EscritorPedido;
   aoAvancar: () => void;
   aoSalvar: () => Promise<void>;
 }) {
@@ -57,7 +58,7 @@ export function EtapaPrevisao({
     setSalvando(true);
     setErro(null);
     try {
-      await salvarPrevisao(ctx.ciclo, sessao, previsao, confirmando);
+      await escritor.salvarPrevisao(ctx.ciclo, sessao, previsao, confirmando);
       await aoSalvar();
       if (confirmando) aoAvancar();
     } catch {

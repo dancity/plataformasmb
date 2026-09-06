@@ -14,6 +14,7 @@ import { SolucaoForm } from '@/paginas/admin/SolucaoForm';
 import { Fornecedores } from '@/paginas/admin/Fornecedores';
 import { Unidades } from '@/paginas/admin/Unidades';
 import { Usuarios } from '@/paginas/admin/Usuarios';
+import { SimularGestor } from '@/paginas/admin/SimularGestor';
 
 /** Para onde cada papel vai ao abrir o app. */
 const DESTINO_PADRAO: Record<Papel, string> = {
@@ -87,6 +88,7 @@ export function App() {
         <Route path="fornecedores" element={<Fornecedores />} />
         <Route path="unidades" element={<Unidades />} />
         <Route path="usuarios" element={<Usuarios />} />
+        <Route path="simular" element={<SimularGestor />} />
       </Route>
 
       <Route

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Esqueleto, EstadoVazio, Selo, juntar } from '@/componentes/ui';
 import { useSessao } from '@/lib/auth';
-import { carregarContexto } from '@/lib/pedido';
+import type { Sessao } from '@/lib/auth';
+import { carregarContexto, escritorPedidoReal } from '@/lib/pedido';
 import type { ContextoPedido } from '@/lib/pedido';
+import { criarEscritorSimulado } from '@/lib/pedidoSimulado';
 import { EtapaPrevisao } from './EtapaPrevisao';
 import { EtapaEscolha } from './EtapaEscolha';
 import { EtapaMapa } from './EtapaMapa';
@@ -25,12 +27,27 @@ function ehEtapa(v: string | null): v is Etapa {
   return v === 'previsao' || v === 'escolha' || v === 'mapa';
 }
 
-export function FluxoPedido() {
-  const sessao = useSessao();
+/**
+ * `sessaoForcada` + `simulado` são o gancho da simulação do admin
+ * (`SimularGestor.tsx`): a mesma tela do gestor, de ponta a ponta, só que
+ * lendo o vínculo escolhido em vez do da própria sessão e gravando as
+ * decisões num escritor que nunca chega ao Firestore.
+ */
+export function FluxoPedido({
+  sessaoForcada,
+  simulado = false,
+}: { sessaoForcada?: Sessao; simulado?: boolean } = {}) {
+  const sessaoAutenticada = useSessao();
+  const sessao = sessaoForcada ?? sessaoAutenticada;
   const [params, setParams] = useSearchParams();
   const [ctx, setCtx] = useState<ContextoPedido | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+
+  const escritor = useMemo(
+    () => (simulado ? criarEscritorSimulado(setCtx) : escritorPedidoReal),
+    [simulado],
+  );
 
   const etapa: Etapa = ehEtapa(params.get('etapa')) ? (params.get('etapa') as Etapa) : 'previsao';
 
@@ -42,7 +59,7 @@ export function FluxoPedido() {
     [setParams],
   );
 
-  const recarregar = useCallback(async () => {
+  const carregar = useCallback(async () => {
     setErro(null);
     try {
       setCtx(await carregarContexto(sessao));
@@ -58,8 +75,14 @@ export function FluxoPedido() {
   }, [sessao]);
 
   useEffect(() => {
-    void recarregar();
-  }, [recarregar]);
+    void carregar();
+  }, [carregar]);
+
+  // Na simulação a escrita já atualiza o ctx local na hora — recarregar do
+  // servidor jogaria fora a decisão simulada e voltaria ao estado real.
+  const aoSalvar = useCallback(async () => {
+    if (!simulado) await carregar();
+  }, [simulado, carregar]);
 
   if (carregando) {
     return (
@@ -98,6 +121,7 @@ export function FluxoPedido() {
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold text-brand">{ctx.unidade.nome}</h1>
+          {simulado && <Selo tom="atencao">simulação — nada aqui é salvo</Selo>}
           {enviado && <Selo tom="concluido">pedido enviado</Selo>}
           {fechado && <Selo tom="neutro">ciclo encerrado</Selo>}
         </div>
@@ -146,8 +170,9 @@ export function FluxoPedido() {
           ctx={ctx}
           sessao={sessao}
           somenteLeitura={somenteLeitura}
+          escritor={escritor}
           aoAvancar={() => irPara('escolha')}
-          aoSalvar={recarregar}
+          aoSalvar={aoSalvar}
         />
       )}
       {etapa === 'escolha' && (
@@ -155,9 +180,10 @@ export function FluxoPedido() {
           ctx={ctx}
           sessao={sessao}
           somenteLeitura={somenteLeitura}
+          escritor={escritor}
           aoVoltar={() => irPara('previsao')}
           aoAvancar={() => irPara('mapa')}
-          aoSalvar={recarregar}
+          aoSalvar={aoSalvar}
         />
       )}
       {etapa === 'mapa' && (
@@ -165,8 +191,9 @@ export function FluxoPedido() {
           ctx={ctx}
           sessao={sessao}
           somenteLeitura={somenteLeitura}
+          escritor={escritor}
           aoVoltar={() => irPara('escolha')}
-          aoSalvar={recarregar}
+          aoSalvar={aoSalvar}
         />
       )}
     </div>

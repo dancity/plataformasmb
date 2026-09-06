@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Botao, Cartao, EstadoVazio, Selo, juntar } from '@/componentes/ui';
 import type { Sessao } from '@/lib/auth';
-import { abrirRascunho, calcularLinhas, salvarDecisao, somarTotais } from '@/lib/pedido';
-import type { ContextoPedido, LinhaCalculada } from '@/lib/pedido';
+import { calcularLinhas, somarTotais } from '@/lib/pedido';
+import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
 import { SEGMENTOS, anosDoSegmento, ordenarAnos } from '@dominio/anosEscolares';
 import type { AnoEscolarId } from '@dominio/anosEscolares';
 import { calcularItem, descreverPreco, formatarBRL, rotularMultiploCredito } from '@dominio/preco';
@@ -19,6 +19,7 @@ export function EtapaEscolha({
   ctx,
   sessao,
   somenteLeitura,
+  escritor,
   aoVoltar,
   aoAvancar,
   aoSalvar,
@@ -26,6 +27,7 @@ export function EtapaEscolha({
   ctx: ContextoPedido;
   sessao: Sessao;
   somenteLeitura: boolean;
+  escritor: EscritorPedido;
   aoVoltar: () => void;
   aoAvancar: () => void;
   aoSalvar: () => Promise<void>;
@@ -83,8 +85,8 @@ export function EtapaEscolha({
       setSalvando(true);
       setErro(null);
       try {
-        const pedidoId = await abrirRascunho(ctx.ciclo, sessao);
-        await salvarDecisao(
+        const pedidoId = await escritor.abrirRascunho(ctx.ciclo, sessao);
+        await escritor.salvarDecisao(
           pedidoId,
           atual.produto,
           atual.habilitacao,
@@ -107,6 +109,7 @@ export function EtapaEscolha({
       atual,
       ctx,
       sessao,
+      escritor,
       marcados,
       recusado,
       creditosEscolhido,

@@ -24,6 +24,7 @@ const ABAS = [
   { para: '/admin/fornecedores', rotulo: 'Fornecedores', fim: false },
   { para: '/admin/unidades', rotulo: 'Unidades', fim: false },
   { para: '/admin/usuarios', rotulo: 'Usuários', fim: false },
+  { para: '/admin/simular', rotulo: 'Simular gestor', fim: false },
 ];
 
 export function LayoutAdmin() {

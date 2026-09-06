@@ -118,18 +118,23 @@ export async function carregarContexto(sessao: Sessao): Promise<ContextoPedido |
 
 // ─── Etapa 2: previsão de alunos ─────────────────────────────────
 
+/** Ano com zero sai do mapa: série que a unidade não vai ofertar não deve
+ * aparecer na escolha nem entrar em conta nenhuma. */
+export function limparPrevisao(porAno: PrevisaoPorAno): PrevisaoPorAno {
+  const limpo: PrevisaoPorAno = {};
+  for (const [ano, n] of Object.entries(porAno)) {
+    if (typeof n === 'number' && n > 0) limpo[ano as AnoEscolarId] = Math.round(n);
+  }
+  return limpo;
+}
+
 export async function salvarPrevisao(
   ciclo: Ciclo,
   sessao: Sessao,
   porAno: PrevisaoPorAno,
   confirmar: boolean,
 ): Promise<void> {
-  // Ano com zero sai do mapa: série que a unidade não vai ofertar não deve
-  // aparecer na escolha nem entrar em conta nenhuma.
-  const limpo: PrevisaoPorAno = {};
-  for (const [ano, n] of Object.entries(porAno)) {
-    if (typeof n === 'number' && n > 0) limpo[ano as AnoEscolarId] = Math.round(n);
-  }
+  const limpo = limparPrevisao(porAno);
 
   await setDoc(
     doc(db, 'matriculas', idMatricula(ciclo.id, sessao.unidadeId!)),
@@ -176,19 +181,15 @@ export interface DecisaoLocal {
   creditosPorAluno?: number;
 }
 
-/**
- * Grava a decisão do gestor sobre uma solução. O valor gravado aqui é
- * provisório e será recalculado no envio — mas gravamos mesmo assim, para
- * que a revisão e o mapa mostrem números sem refazer a conta a cada tela.
- */
-export async function salvarDecisao(
-  pedidoId: string,
+/** A conta pura por trás de uma decisão — sem gravar nada. Usada tanto pelo
+ * salvamento real quanto pelo escritor simulado, para os dois nunca divergirem. */
+export function computarItem(
   produto: Produto,
   habilitacao: HabilitacaoResolvida,
   fornecedorNome: string,
   previsao: PrevisaoPorAno,
   decisao: DecisaoLocal,
-): Promise<ItemPedido> {
+): ItemPedido {
   const anos = decisao.recusado ? habilitacao.obrigatorios : anosEfetivos(habilitacao, decisao.anos);
   const { alunos, valorAnual } = calcularItem(
     habilitacao.preco,
@@ -200,7 +201,7 @@ export async function salvarDecisao(
   const alunosPorAno: PrevisaoPorAno = {};
   for (const ano of anos) alunosPorAno[ano] = previsao[ano] ?? 0;
 
-  const item: ItemPedido = {
+  return {
     id: produto.id,
     produtoId: produto.id,
     produtoNome: produto.nome,
@@ -219,7 +220,22 @@ export async function salvarDecisao(
       ? { creditosPorAluno: decisao.creditosPorAluno }
       : {}),
   };
+}
 
+/**
+ * Grava a decisão do gestor sobre uma solução. O valor gravado aqui é
+ * provisório e será recalculado no envio — mas gravamos mesmo assim, para
+ * que a revisão e o mapa mostrem números sem refazer a conta a cada tela.
+ */
+export async function salvarDecisao(
+  pedidoId: string,
+  produto: Produto,
+  habilitacao: HabilitacaoResolvida,
+  fornecedorNome: string,
+  previsao: PrevisaoPorAno,
+  decisao: DecisaoLocal,
+): Promise<ItemPedido> {
+  const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao);
   const { id: _id, ...semId } = item;
   await setDoc(doc(db, 'pedidos', pedidoId, 'itens', produto.id), semId);
   return item;
@@ -281,3 +297,25 @@ export async function enviarPedido(cicloId: string): Promise<{ totais: Totais }>
   const { data } = await enviar({ cicloId });
   return data;
 }
+
+// ─── Escritor ────────────────────────────────────────────────────
+
+/**
+ * As quatro escritas que as telas do gestor fazem, atrás de uma interface —
+ * é o que permite ao admin simular o preenchimento (`pedidoSimulado.ts`)
+ * reaproveitando as mesmas telas sem gravar nada em nome de uma unidade que
+ * não é dele.
+ */
+export interface EscritorPedido {
+  salvarPrevisao: typeof salvarPrevisao;
+  abrirRascunho: typeof abrirRascunho;
+  salvarDecisao: typeof salvarDecisao;
+  enviarPedido: typeof enviarPedido;
+}
+
+export const escritorPedidoReal: EscritorPedido = {
+  salvarPrevisao,
+  abrirRascunho,
+  salvarDecisao,
+  enviarPedido,
+};
