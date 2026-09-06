@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { GradeHabilitacao } from '@/componentes/GradeHabilitacao';
-import { Botao, Campo, Entrada, EsqueletoLinhas, EstadoVazio, Selecao, juntar } from '@/componentes/ui';
+import { Botao, Campo, Entrada, EsqueletoLinhas, EstadoVazio, Selecao } from '@/componentes/ui';
 import type { GradeHabilitacao as Grade } from '@/lib/dados';
 import {
   atualizarProduto,
@@ -21,7 +21,7 @@ import type {
   RegraHabilitacao,
   Visibilidade,
 } from '@dominio/tipos';
-import { descreverPreco, reaisParaCentavos, rotularMultiploCredito } from '@dominio/preco';
+import { descreverPreco, reaisParaCentavos } from '@dominio/preco';
 import { useAdmin } from './LayoutAdmin';
 
 /**
@@ -43,10 +43,6 @@ const CATEGORIAS = [
   'Outros',
 ];
 
-/** Múltiplos de alunos oferecidos como opção de crédito. Fixos de propósito:
- *  não é campo de texto livre — a rede negocia dentro de faixas conhecidas. */
-const MULTIPLOS_CREDITO = [0.25, 0.5, 1, 1.5, 2, 3, 4, 5];
-
 interface Rascunho {
   nome: string;
   fornecedorId: string;
@@ -58,7 +54,6 @@ interface Rascunho {
   valorTexto: string;
   meses: string;
   minimoAlunos: string;
-  opcoesCredito: number[];
   ordem: string;
   visibilidade: Visibilidade;
 }
@@ -74,7 +69,6 @@ const VAZIO: Rascunho = {
   valorTexto: '',
   meses: '10',
   minimoAlunos: '',
-  opcoesCredito: [],
   ordem: '10',
   visibilidade: 'rascunho',
 };
@@ -129,7 +123,6 @@ export function SolucaoForm() {
           minimoAlunos: produto.precificacao.minimoAlunos
             ? String(produto.precificacao.minimoAlunos)
             : '',
-          opcoesCredito: produto.precificacao.opcoesCredito ?? [],
           ordem: String(produto.ordem),
           visibilidade: produto.visibilidade,
         });
@@ -144,15 +137,6 @@ export function SolucaoForm() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
-
-  function alternarMultiplo(multiplo: number) {
-    setRascunho((r) => ({
-      ...r,
-      opcoesCredito: r.opcoesCredito.includes(multiplo)
-        ? r.opcoesCredito.filter((m) => m !== multiplo)
-        : [...r.opcoesCredito, multiplo].sort((a, b) => a - b),
-    }));
-  }
 
   async function salvar() {
     if (!ciclo) return;
@@ -170,10 +154,6 @@ export function SolucaoForm() {
         throw new Error('Meses faturados deve ser um número de 1 a 12.');
       }
 
-      if (rascunho.base === 'credito' && rascunho.opcoesCredito.length === 0) {
-        throw new Error('Marque ao menos um múltiplo de crédito por aluno.');
-      }
-
       const dados = {
         cicloId: ciclo.id,
         nome: rascunho.nome.trim(),
@@ -189,7 +169,6 @@ export function SolucaoForm() {
           ...(rascunho.base === 'aluno' && rascunho.minimoAlunos
             ? { minimoAlunos: Number(rascunho.minimoAlunos) }
             : {}),
-          ...(rascunho.base === 'credito' ? { opcoesCredito: rascunho.opcoesCredito } : {}),
         },
         ordem: Number(rascunho.ordem) || 0,
         visibilidade: rascunho.visibilidade,
@@ -395,45 +374,11 @@ export function SolucaoForm() {
           )}
         </div>
 
-        {rascunho.base === 'credito' && (
-          <Campo
-            rotulo="Múltiplos de alunos que o gestor pode escolher"
-            obrigatorio
-            dica="Serviço como correção de redação não cobra 1 crédito por aluno necessariamente, e pode variar por ano escolar (mais redações na 3ª série do médio do que no fundamental, por exemplo). Marque as faixas que a rede negociou — o gestor escolhe uma para cada ano, na hora de contratar."
-          >
-            <div className="flex flex-wrap gap-2">
-              {MULTIPLOS_CREDITO.map((multiplo) => {
-                const marcado = rascunho.opcoesCredito.includes(multiplo);
-                return (
-                  <button
-                    key={multiplo}
-                    type="button"
-                    aria-pressed={marcado}
-                    onClick={() => alternarMultiplo(multiplo)}
-                    className={juntar(
-                      'h-9 min-w-14 rounded-lg border px-3 text-sm transition-colors',
-                      marcado
-                        ? 'border-brand-medium bg-brand-medium font-medium text-white'
-                        : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400',
-                    )}
-                  >
-                    {rotularMultiploCredito(multiplo)}
-                  </button>
-                );
-              })}
-            </div>
-          </Campo>
-        )}
-
         <p className="rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700">
           O gestor vai ler: <strong>{previaPreco}</strong>
           {rascunho.base === 'escola' && <> — marcar mais anos escolares não muda esse valor.</>}
           {rascunho.base === 'credito' && (
-            <>
-              {' '}
-              — e escolhe, entre {rascunho.opcoesCredito.length || 0} opção(ões), quantos créditos
-              por aluno em cada ano escolar.
-            </>
+            <> — e digita a quantidade de créditos de cada ano escolar na hora de contratar.</>
           )}
         </p>
       </fieldset>

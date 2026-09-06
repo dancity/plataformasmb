@@ -219,26 +219,25 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       continue;
     }
 
-    // Crédito exige que o gestor tenha escolhido, para CADA ano marcado, um
-    // dos múltiplos que o catálogo oferece — o mesmo serviço pode gastar
-    // créditos diferentes por ano, então não basta um número só para a
-    // solução inteira, e o que o cliente mandou não vale sem bater com a
-    // lista do catálogo, ano a ano.
+    // Crédito exige que o gestor tenha digitado a quantidade em CADA ano
+    // marcado — o mesmo serviço gasta números diferentes por ano, então não
+    // basta um valor só para a solução inteira. Não há lista do catálogo
+    // para validar contra: só que seja um inteiro não negativo, igual à
+    // licença ajustada manualmente.
     let creditosPorAno: PrevisaoPorAno | undefined;
     if (hab.preco.base === 'credito') {
-      const opcoes = hab.preco.opcoesCredito ?? [];
-      const escolhidos: PrevisaoPorAno = {};
+      const digitados: PrevisaoPorAno = {};
       const faltaAlgumAno = anos.some((ano) => {
-        const escolhido = escolha?.creditosPorAno?.[ano];
-        if (typeof escolhido !== 'number' || !opcoes.includes(escolhido)) return true;
-        escolhidos[ano] = escolhido;
+        const valor = escolha?.creditosPorAno?.[ano];
+        if (typeof valor !== 'number' || !Number.isInteger(valor) || valor < 0) return true;
+        digitados[ano] = valor;
         return false;
       });
       if (faltaAlgumAno) {
         pendentes.push(produto.nome);
         continue;
       }
-      creditosPorAno = escolhidos;
+      creditosPorAno = digitados;
     }
 
     const previsaoEfetiva = aplicarLicencas(previsao, escolha?.licencasPorAno, anos);

@@ -108,14 +108,6 @@ export interface Precificacao {
   meses: number;
   /** Piso de cobrança: abaixo disso, cobra-se como se fosse este número. */
   minimoAlunos?: number;
-  /**
-   * Só quando base = 'credito': os múltiplos de alunos que o gestor pode
-   * escolher, ano escolar por ano escolar (ex.: 4, 6, 8 — quatro redações
-   * corrigidas por aluno no fundamental, oito na 3ª série do médio). Não é
-   * livre — a rede negociou faixas, e o gestor escolhe entre elas, um ano
-   * de cada vez.
-   */
-  opcoesCredito?: number[];
 }
 
 export type Visibilidade = 'rascunho' | 'publicado' | 'suspenso';
@@ -230,9 +222,10 @@ export interface ItemPedido {
   alunosPorAno: PrevisaoPorAno;
   alunosTotal: number;
   /**
-   * Só quando a solução é cobrada por crédito: o múltiplo escolhido em cada
-   * ano escolar — o mesmo serviço pode gastar mais créditos por aluno num
-   * ano do que em outro (redação corrigida: poucas no fundamental, muitas
+   * Só quando a solução é cobrada por crédito: a quantidade de créditos
+   * digitada em cada ano escolar — o gestor digita direto, não é um
+   * multiplicador sobre a previsão. O mesmo serviço gasta números
+   * diferentes por ano (redação corrigida: poucas no fundamental, muitas
    * no 3º do médio), então não é um número só para a solução inteira.
    */
   creditosPorAno?: PrevisaoPorAno;

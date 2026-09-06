@@ -6,7 +6,7 @@ import {
   calcularValorAnual,
   descreverPreco,
   reaisParaCentavos,
-  totalDeCreditos,
+  somarCreditos,
 } from '../dominio/preco';
 import type { Precificacao } from '../dominio/tipos';
 
@@ -129,37 +129,33 @@ describe('cálculo do valor anual', () => {
     expect(calcularValorAnual(preco, { alunos: 45 })).toBe(450_000); // cobra 45
   });
 
-  it('crédito cobra o múltiplo de alunos que o gestor escolheu, igual em todos os anos', () => {
-    const preco: Precificacao = {
-      base: 'credito', ciclo: 'anual', valor: 800, meses: 12, opcoesCredito: [0.5, 1, 2],
-    };
-    // 1× os 440 alunos dos anos iniciais.
-    const um = calcularItem(preco, PREVISAO, ANOS_INICIAIS, { EF1: 1, EF2: 1, EF3: 1, EF4: 1, EF5: 1 });
-    expect(um.alunos).toBe(440);
+  it('crédito soma a quantidade digitada em cada ano — não multiplica nada sozinho', () => {
+    const preco: Precificacao = { base: 'credito', ciclo: 'anual', valor: 800, meses: 12 };
+    // O gestor digitou 440 no total (1 crédito por aluno, mas isso é dele decidir).
+    const um = calcularItem(preco, PREVISAO, ANOS_INICIAIS, {
+      EF1: 88, EF2: 92, EF3: 90, EF4: 86, EF5: 84,
+    });
+    expect(um.alunos).toBe(440); // alunos e créditos são contas independentes
     expect(um.creditos).toBe(440);
     expect(um.valorAnual).toBe(800 * 440);
-
-    // Meio crédito por aluno arredonda pra inteiro — não existe 0,5 crédito.
-    const meio = calcularValorAnual(preco, { alunos: 440, creditos: totalDeCreditos(PREVISAO, ANOS_INICIAIS, { EF1: 0.5, EF2: 0.5, EF3: 0.5, EF4: 0.5, EF5: 0.5 }) });
-    expect(meio).toBe(800 * 220);
   });
 
-  it('crédito varia por ano escolar — o mesmo serviço custa múltiplos diferentes', () => {
-    const preco: Precificacao = {
-      base: 'credito', ciclo: 'anual', valor: 1000, meses: 12, opcoesCredito: [4, 8],
-    };
-    // 4 redações por aluno do fundamental, 8 na 3ª série do médio.
-    const { creditos, valorAnual } = calcularItem(
-      preco,
-      PREVISAO,
-      ['EF1', 'EM3'],
-      { EF1: 4, EM3: 8 },
-    );
-    expect(creditos).toBe(PREVISAO.EF1 * 4 + PREVISAO.EM3 * 8); // 88*4 + 66*8 = 880
+  it('crédito varia por ano escolar — o mesmo serviço gasta números diferentes', () => {
+    const preco: Precificacao = { base: 'credito', ciclo: 'anual', valor: 1000, meses: 12 };
+    // 4 redações por aluno do fundamental (88 × 4 = 352), 8 na 3ª série (66 × 8 = 528).
+    const { creditos, valorAnual } = calcularItem(preco, PREVISAO, ['EF1', 'EM3'], {
+      EF1: 352,
+      EM3: 528,
+    });
+    expect(creditos).toBe(880);
     expect(valorAnual).toBe(1000 * 880);
   });
 
-  it('ano sem múltiplo escolhido não entra na conta — não é decisão que o catálogo tome sozinho', () => {
+  it('soma só os anos considerados, ignora o resto do mapa de créditos', () => {
+    expect(somarCreditos({ EF1: 100, EM3: 999 }, ['EF1'])).toBe(100);
+  });
+
+  it('ano sem crédito digitado não entra na conta — não é decisão que o catálogo tome sozinho', () => {
     const preco: Precificacao = { base: 'credito', ciclo: 'anual', valor: 800, meses: 12 };
     expect(calcularValorAnual(preco, { alunos: 440 })).toBe(0);
     expect(calcularItem(preco, PREVISAO, ANOS_INICIAIS, {}).creditos).toBe(0);

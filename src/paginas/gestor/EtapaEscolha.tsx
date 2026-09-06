@@ -5,7 +5,7 @@ import { calcularLinhas, somarTotais } from '@/lib/pedido';
 import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
 import { SEGMENTOS, anoEscolar, anosDoSegmento, aplicarLicencas, ordenarAnos } from '@dominio/anosEscolares';
 import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
-import { calcularItem, descreverPreco, formatarBRL, rotularMultiploCredito } from '@dominio/preco';
+import { calcularItem, descreverPreco, formatarBRL } from '@dominio/preco';
 
 /**
  * Etapa 2 — uma solução por vez.
@@ -43,8 +43,12 @@ export function EtapaEscolha({
   // Seleção local: responde ao clique na hora, grava logo em seguida.
   const [marcados, setMarcados] = useState<Set<AnoEscolarId>>(new Set());
   const [recusado, setRecusado] = useState(false);
-  // Múltiplo de crédito escolhido em cada ano — ano ausente ainda não decidiu.
+  // Créditos digitados em cada ano — ano ausente ainda não decidiu (0 é uma
+  // escolha válida, ausência não é).
   const [creditosPorAno, setCreditosPorAno] = useState<PrevisaoPorAno>({});
+  // Atalho de preenchimento rápido: multiplicador digitado uma vez, aplicado
+  // a todos os anos marcados de uma tacada.
+  const [multiplicadorRapido, setMultiplicadorRapido] = useState('');
   // Licenças ajustadas manualmente, ano a ano — ausente aqui segue a previsão.
   const [licencas, setLicencas] = useState<PrevisaoPorAno>({});
   const [ajustarLicencas, setAjustarLicencas] = useState(false);
@@ -60,6 +64,7 @@ export function EtapaEscolha({
     setMarcados(new Set(opcionaisMarcados));
     setRecusado(atual.item?.origem === 'recusado');
     setCreditosPorAno(atual.item?.creditosPorAno ?? {});
+    setMultiplicadorRapido('');
 
     // Só guarda o que realmente diverge da previsão — o resto segue normal.
     const divergentes: PrevisaoPorAno = {};
@@ -81,16 +86,18 @@ export function EtapaEscolha({
       : ordenarAnos([...atual.habilitacao.obrigatorios, ...marcados]);
   }, [atual, marcados, recusado]);
 
-  // Falta escolher o múltiplo de crédito de pelo menos um ano ativo — não dá
-  // para seguir sem isso, porque não é número que o catálogo infira sozinho.
+  // Falta digitar a quantidade de créditos de pelo menos um ano ativo — não
+  // dá para seguir sem isso, porque não é número que o catálogo infira
+  // sozinho. Zero é uma escolha válida; ausência não é.
   const precisaEscolherCredito =
     !!atual &&
     atual.habilitacao.preco.base === 'credito' &&
     !recusado &&
-    anosAtivos.some((ano) => !creditosPorAno[ano]);
+    anosAtivos.some((ano) => creditosPorAno[ano] === undefined);
 
-  const permiteLicencas =
-    !!atual && (atual.habilitacao.preco.base === 'aluno' || atual.habilitacao.preco.base === 'credito');
+  // Licença ajustada manualmente só faz sentido quando o preço é por aluno:
+  // em crédito a quantidade já é digitada direto, ano a ano.
+  const permiteLicencas = !!atual && atual.habilitacao.preco.base === 'aluno';
 
   const previsaoEfetiva = useMemo(
     () => aplicarLicencas(ctx.previsao, permiteLicencas ? licencas : undefined, anosAtivos),
@@ -115,7 +122,7 @@ export function EtapaEscolha({
     async (proximo: boolean) => {
       if (!atual || somenteLeitura) return;
       if (precisaEscolherCredito) {
-        setErro('Escolha o múltiplo de créditos de cada ano marcado antes de continuar.');
+        setErro('Digite a quantidade de créditos de cada ano marcado antes de continuar.');
         return;
       }
       setSalvando(true);
@@ -383,39 +390,70 @@ export function EtapaEscolha({
             <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-3.5">
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-gray-700">
-                  Quantos créditos por aluno, em cada ano?
+                  Quantos créditos em cada ano?
                 </span>
                 <p className="text-xs text-gray-500">
-                  Serviço como este pode gastar mais créditos por aluno num ano do que em outro —
-                  por exemplo, mais redações corrigidas na 3ª série do médio do que no fundamental.
-                  A rede negociou faixas: escolha uma para cada ano marcado.
+                  Serviço como este pode gastar números diferentes por ano — por exemplo, mais
+                  redações corrigidas na 3ª série do médio do que no fundamental. Digite a
+                  quantidade de créditos de cada ano marcado.
                 </p>
               </div>
 
-              {(habilitacao.preco.opcoesCredito ?? []).length > 1 && (
-                <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-xs text-gray-500">Preencher todos os anos com:</span>
-                  {(habilitacao.preco.opcoesCredito ?? []).map((multiplo) => (
-                    <button
-                      key={multiplo}
-                      type="button"
-                      disabled={somenteLeitura}
-                      onClick={() =>
-                        setCreditosPorAno(Object.fromEntries(anosAtivos.map((a) => [a, multiplo])))
-                      }
-                      className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-600 transition-colors hover:border-brand-medium hover:text-brand-medium disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {rotularMultiploCredito(multiplo)} em todos
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                <span className="text-xs text-gray-500">Preencher todos os anos:</span>
+                <Botao
+                  variante="secundario"
+                  tamanho="sm"
+                  disabled={somenteLeitura}
+                  onClick={() =>
+                    setCreditosPorAno(
+                      Object.fromEntries(anosAtivos.map((a) => [a, ctx.previsao[a] ?? 0])),
+                    )
+                  }
+                >
+                  Igualar à quantidade de alunos
+                </Botao>
+                <span className="text-xs text-gray-500">ou multiplicar os alunos por</span>
+                <Entrada
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  disabled={somenteLeitura}
+                  value={multiplicadorRapido}
+                  onChange={(e) => setMultiplicadorRapido(e.target.value)}
+                  placeholder="ex.: 4"
+                  className="max-w-16 px-2 py-1 text-xs"
+                  aria-label="Multiplicador para preencher todos os anos"
+                />
+                <Botao
+                  variante="secundario"
+                  tamanho="sm"
+                  disabled={
+                    somenteLeitura || !multiplicadorRapido || !Number.isFinite(Number(multiplicadorRapido))
+                  }
+                  onClick={() => {
+                    const multiplicador = Number(multiplicadorRapido);
+                    if (!Number.isFinite(multiplicador)) return;
+                    setCreditosPorAno(
+                      Object.fromEntries(
+                        anosAtivos.map((a) => [
+                          a,
+                          Math.max(0, Math.round((ctx.previsao[a] ?? 0) * multiplicador)),
+                        ]),
+                      ),
+                    );
+                  }}
+                >
+                  Aplicar a todos
+                </Botao>
+              </div>
 
               <fieldset disabled={somenteLeitura} className="flex flex-col gap-2 disabled:opacity-50">
                 {anosAtivos.map((ano) => {
                   const previsaoAno = ctx.previsao[ano] ?? 0;
-                  const multiplo = creditosPorAno[ano];
-                  const creditosAno = multiplo ? Math.round(previsaoAno * multiplo) : 0;
+                  const valor = creditosPorAno[ano];
+                  const proporcao = valor !== undefined && previsaoAno > 0 ? valor / previsaoAno : null;
                   return (
                     <div key={ano} className="flex flex-wrap items-center gap-2.5">
                       <span className="w-24 shrink-0 text-sm text-gray-600">
@@ -424,34 +462,34 @@ export function EtapaEscolha({
                       <span className="w-20 shrink-0 font-mono text-xs text-gray-400 tabular-nums">
                         {previsaoAno} alunos
                       </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(habilitacao.preco.opcoesCredito ?? []).map((opcao) => {
-                          const ligado = multiplo === opcao;
-                          return (
-                            <button
-                              key={opcao}
-                              type="button"
-                              aria-pressed={ligado}
-                              onClick={() => setCreditosPorAno((c) => ({ ...c, [ano]: opcao }))}
-                              className={juntar(
-                                'h-8 min-w-12 rounded-lg border px-2.5 text-xs transition-colors',
-                                ligado
-                                  ? 'border-brand-medium bg-brand-medium font-medium text-white'
-                                  : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400',
-                              )}
-                            >
-                              {rotularMultiploCredito(opcao)}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <span
-                        className={juntar(
-                          'font-mono text-xs tabular-nums',
-                          multiplo ? 'text-gray-500' : 'text-amber-600',
-                        )}
-                      >
-                        {multiplo ? `= ${creditosAno} créditos` : 'escolha um múltiplo'}
+                      <Entrada
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        value={valor ?? ''}
+                        placeholder="créditos"
+                        onChange={(e) => {
+                          const texto = e.target.value;
+                          if (texto === '') {
+                            setCreditosPorAno((c) => {
+                              const copia = { ...c };
+                              delete copia[ano];
+                              return copia;
+                            });
+                            return;
+                          }
+                          const n = Number(texto);
+                          if (Number.isFinite(n)) {
+                            setCreditosPorAno((c) => ({ ...c, [ano]: Math.max(0, Math.round(n)) }));
+                          }
+                        }}
+                        className="max-w-28"
+                        aria-label={`Créditos de ${anoEscolar(ano).nome}`}
+                      />
+                      <span className="font-mono text-xs text-gray-400 tabular-nums">
+                        {proporcao !== null
+                          ? `${proporcao.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}× por aluno`
+                          : ''}
                       </span>
                     </div>
                   );

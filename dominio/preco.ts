@@ -57,22 +57,17 @@ export function quantidadeCobravel(preco: Precificacao, ctx: ContextoCalculo): n
 }
 
 /**
- * Soma, ano a ano, alunos × múltiplo de créditos daquele ano — nunca um
- * multiplicador só para a solução inteira. O mesmo serviço gasta créditos
- * diferentes por ano (poucas redações corrigidas no fundamental, muitas na
- * 3ª série do médio), e é assim que a rede negocia: por ano, não por aluno
- * solto.
+ * Soma, ano a ano, os créditos digitados — não é multiplicador sobre a
+ * previsão, é a quantidade que o gestor escreveu para aquele ano. O mesmo
+ * serviço gasta números diferentes por ano (poucas redações corrigidas no
+ * fundamental, muitas na 3ª série do médio), e é por isso que não é um
+ * único número para a solução inteira.
  */
-export function totalDeCreditos(
-  previsao: PrevisaoPorAno,
-  anos: readonly AnoEscolarId[],
+export function somarCreditos(
   creditosPorAno: PrevisaoPorAno,
+  anos: readonly AnoEscolarId[],
 ): number {
-  return anos.reduce((soma, ano) => {
-    const multiplo = creditosPorAno[ano];
-    if (!multiplo) return soma;
-    return soma + Math.round((previsao[ano] ?? 0) * multiplo);
-  }, 0);
+  return anos.reduce((soma, ano) => soma + (creditosPorAno[ano] ?? 0), 0);
 }
 
 /** Calcula direto a partir da previsão e dos anos marcados. */
@@ -84,7 +79,7 @@ export function calcularItem(
 ): { alunos: number; creditos: number; valorAnual: Centavos } {
   const alunos = alunosNosAnos(previsao, anosSelecionados);
   const creditos =
-    preco.base === 'credito' ? totalDeCreditos(previsao, anosSelecionados, creditosPorAno ?? {}) : 0;
+    preco.base === 'credito' ? somarCreditos(creditosPorAno ?? {}, anosSelecionados) : 0;
   return { alunos, creditos, valorAnual: calcularValorAnual(preco, { alunos, creditos }) };
 }
 
@@ -120,11 +115,6 @@ export function descreverPreco(preco: Precificacao): string {
   const unidade = `${formatarBRL(preco.valor)} / ${ROTULO_BASE[preco.base]}`;
   if (preco.ciclo === 'anual') return `${unidade} / ano`;
   return `${unidade} / mês · ${preco.meses} ${preco.meses === 1 ? 'mês' : 'meses'} faturados`;
-}
-
-/** Ex.: "1×" ou "0,5×" — o rótulo curto de uma opção de múltiplo de crédito. */
-export function rotularMultiploCredito(multiplo: number): string {
-  return `${multiplo.toLocaleString('pt-BR')}×`;
 }
 
 /** Converte "1.234,56" ou "1234.56" digitado pelo admin em centavos. */

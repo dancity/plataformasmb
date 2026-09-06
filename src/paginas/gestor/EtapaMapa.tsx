@@ -51,18 +51,13 @@ export function EtapaMapa({
 
   /**
    * Rateia o valor de uma solução no ano escolar, para a coluna. Por
-   * crédito, o preço é por crédito, não por aluno — e o múltiplo pode
-   * variar ano a ano, então a quantidade que entra na conta é
-   * alunos × créditos daquele ano, não o aluno sozinho.
+   * crédito, o preço é por crédito, não por aluno — e a quantidade digitada
+   * já é o total daquele ano, não um multiplicador sobre os alunos.
    */
   function valorNoAno(l: LinhaCalculada, ano: AnoEscolarId): Centavos {
-    const alunosNoAno = l.item?.alunosPorAno[ano] ?? 0;
-    if (alunosNoAno === 0) return 0;
     const preco = l.habilitacao.preco;
     const quantidade =
-      preco.base === 'credito'
-        ? Math.round(alunosNoAno * (l.item?.creditosPorAno?.[ano] ?? 0))
-        : alunosNoAno;
+      preco.base === 'credito' ? (l.item?.creditosPorAno?.[ano] ?? 0) : (l.item?.alunosPorAno[ano] ?? 0);
     if (quantidade === 0) return 0;
     const vezes = preco.ciclo === 'mensal' ? preco.meses : 1;
     return preco.valor * quantidade * vezes;
