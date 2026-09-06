@@ -112,7 +112,7 @@ function contexto(): ContextoPedido {
 }
 
 describe('resolverItensDoModelo', () => {
-  it('marca todos os anos habilitados de cada produto disponível', () => {
+  it('respeita os anos escolhidos no modelo, e obrigatório entra de qualquer jeito', () => {
     const ctx = contexto();
     const linhas = calcularLinhas(ctx, 'recife');
     const modelo: Modelo = {
@@ -121,7 +121,12 @@ describe('resolverItensDoModelo', () => {
       nome: 'Avaliações padrão',
       descricao: '',
       categoria: 'Geral',
-      produtoIds: ['diagnostica', 'redacao'],
+      itens: [
+        // EF1 é obrigatório nesta regional — nem precisava estar aqui pra entrar.
+        { produtoId: 'diagnostica', anos: ['EF2'] },
+        // Pedido só EF1: EF2 também é opcional aqui, mas o modelo não marcou.
+        { produtoId: 'redacao', anos: ['EF1'] },
+      ],
       visibilidade: 'publicado',
       criadoEm: CICLO.criadoEm,
       atualizadoEm: CICLO.criadoEm,
@@ -133,14 +138,27 @@ describe('resolverItensDoModelo', () => {
     expect(itens).toHaveLength(2);
 
     const diagnostica = itens.find((i) => i.produto.id === 'diagnostica')!;
-    expect(diagnostica.decisao.anos).toEqual(['EF2']); // obrigatorios ficam de fora de `anos`, entram via anosEfetivos
-    expect(diagnostica.decisao.recusado).toBe(false);
-    expect(diagnostica.decisao.creditosPorAno).toBeUndefined(); // preço por aluno não usa crédito
+    const itemDiagnostica = computarItem(
+      diagnostica.produto,
+      diagnostica.habilitacao,
+      diagnostica.fornecedorNome,
+      diagnostica.previsao,
+      diagnostica.decisao,
+    );
+    // EF1 entra mesmo sem estar nos anos do modelo — é obrigatório aqui.
+    expect(itemDiagnostica.anosSelecionados).toEqual(['EF1', 'EF2']);
 
     const redacao = itens.find((i) => i.produto.id === 'redacao')!;
-    expect(redacao.decisao.anos).toEqual(['EF1', 'EF2']);
-    // Crédito por padrão: 1 por aluno previsto, em cada ano habilitado.
-    expect(redacao.decisao.creditosPorAno).toEqual({ EF1: 88, EF2: 92 });
+    const itemRedacao = computarItem(
+      redacao.produto,
+      redacao.habilitacao,
+      redacao.fornecedorNome,
+      redacao.previsao,
+      redacao.decisao,
+    );
+    // EF2 NÃO entra: é opcional aqui, mas o modelo só pediu EF1.
+    expect(itemRedacao.anosSelecionados).toEqual(['EF1']);
+    expect(itemRedacao.creditosPorAno).toEqual({ EF1: 88 });
   });
 
   it('lista como indisponível o produto sem regra nesta regional', () => {
@@ -152,7 +170,10 @@ describe('resolverItensDoModelo', () => {
       nome: 'Pacote com robótica',
       descricao: '',
       categoria: 'Geral',
-      produtoIds: ['diagnostica', 'robotica'],
+      itens: [
+        { produtoId: 'diagnostica', anos: ['EF1', 'EF2'] },
+        { produtoId: 'robotica', anos: ['EF1', 'EF2'] },
+      ],
       visibilidade: 'publicado',
       criadoEm: CICLO.criadoEm,
       atualizadoEm: CICLO.criadoEm,
@@ -164,6 +185,29 @@ describe('resolverItensDoModelo', () => {
     expect(indisponiveis).toEqual(['Robótica Educacional']);
   });
 
+  it('lista como indisponível quando os anos escolhidos não cruzam com nada habilitado aqui', () => {
+    const ctx = contexto();
+    const linhas = calcularLinhas(ctx, 'recife');
+    const modelo: Modelo = {
+      id: 'm4',
+      cicloId: CICLO.id,
+      nome: 'Modelo fora de ano',
+      descricao: '',
+      categoria: 'Geral',
+      // Redação não tem obrigatório nesta regional, e EM1 não é opcional pra
+      // ela aqui (só EF1/EF2 são) — nada pra marcar.
+      itens: [{ produtoId: 'redacao', anos: ['EM1'] }],
+      visibilidade: 'publicado',
+      criadoEm: CICLO.criadoEm,
+      atualizadoEm: CICLO.criadoEm,
+    };
+
+    const { itens, indisponiveis } = resolverItensDoModelo(modelo, linhas, ctx);
+
+    expect(itens).toEqual([]);
+    expect(indisponiveis).toEqual(['Correção de Redação']);
+  });
+
   it('produto removido do catálogo entra no indisponível pelo id, sem quebrar', () => {
     const ctx = contexto();
     const linhas = calcularLinhas(ctx, 'recife');
@@ -173,7 +217,7 @@ describe('resolverItensDoModelo', () => {
       nome: 'Modelo com produto excluído',
       descricao: '',
       categoria: 'Geral',
-      produtoIds: ['produto-que-nao-existe-mais'],
+      itens: [{ produtoId: 'produto-que-nao-existe-mais', anos: ['EF1'] }],
       visibilidade: 'publicado',
       criadoEm: CICLO.criadoEm,
       atualizadoEm: CICLO.criadoEm,

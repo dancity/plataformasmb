@@ -129,14 +129,26 @@ export interface Produto {
 }
 
 /**
+ * Uma solução do pacote e em quais anos escolares ela entra — escolhido pelo
+ * admin no cadastro, não inferido da habilitação. Na hora de aplicar, esses
+ * anos ainda passam pelo crivo da regional do gestor (`anosEfetivos`): ano
+ * escolhido aqui que a regional não habilita pra este produto simplesmente
+ * não entra, e obrigatório da regional entra de qualquer forma.
+ */
+export interface ItemModelo {
+  produtoId: string;
+  anos: AnoEscolarId[];
+}
+
+/**
  * Pacote fechado de avaliações — na prática o único uso de modelo, embora
  * nada aqui restrinja a categoria das soluções escolhidas. Aplicar um
- * modelo marca, pra cada produto da lista, todos os anos habilitados na
- * regional do gestor, puxando a previsão de alunos automaticamente pra
- * calcular o valor; nenhum ajuste fica disponível solução por solução
- * depois. É fechado de propósito: pra mudar algo, o gestor remove o
- * modelo inteiro (as soluções que vieram dele voltam a ficar sem decisão)
- * e aplica de novo, ou decide manualmente.
+ * modelo marca, pra cada item da lista, os anos escolhidos (filtrados pelo
+ * que a regional do gestor habilita), puxando a previsão de alunos
+ * automaticamente pra calcular o valor; nenhum ajuste fica disponível
+ * solução por solução depois. É fechado de propósito: pra mudar algo, o
+ * gestor remove o modelo inteiro (as soluções que vieram dele voltam a
+ * ficar sem decisão) e aplica de novo, ou decide manualmente.
  */
 export interface Modelo {
   id: string;
@@ -145,7 +157,7 @@ export interface Modelo {
   descricao: string;
   categoria: string;
   /** Na ordem em que aparecem na etapa de escolha. */
-  produtoIds: string[];
+  itens: ItemModelo[];
   visibilidade: Visibilidade;
   criadoEm: DataISO;
   atualizadoEm: DataISO;

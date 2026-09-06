@@ -359,7 +359,7 @@ export function EtapaEscolha({
                   <span className="mt-1 font-mono text-[11px] tracking-wide text-gray-400 uppercase">
                     {aplicado
                       ? 'toque pra remover'
-                      : `${m.produtoIds.length} avaliaç${m.produtoIds.length === 1 ? 'ão' : 'ões'}`}
+                      : `${m.itens.length} avaliaç${m.itens.length === 1 ? 'ão' : 'ões'}`}
                   </span>
                 </button>
               );

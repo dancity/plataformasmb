@@ -318,11 +318,14 @@ export interface ItemParaAplicar {
 }
 
 /**
- * Resolve o que um modelo significa PARA ESTA unidade agora: cada produto do
- * modelo que está disponível na regional do gestor entra marcado em todos os
- * anos habilitados — os mesmos que "todo o segmento" marcaria manualmente,
- * um a um. Produto fora do catálogo publicado ou sem regra pra esta regional
- * não é erro: só não entra no resultado, e quem chama avisa o gestor.
+ * Resolve o que um modelo significa PARA ESTA unidade agora: cada item do
+ * modelo entra marcado nos anos que o admin escolheu no cadastro, filtrados
+ * pelo que a regional do gestor realmente habilita pra aquele produto —
+ * obrigatório da regional entra de qualquer jeito, ano fora da habilitação
+ * não entra mesmo que o modelo peça. Produto fora do catálogo publicado, sem
+ * regra nenhuma pra esta regional, ou cujos anos escolhidos não cruzam com
+ * nada habilitado aqui não é erro: só não entra no resultado, e quem chama
+ * avisa o gestor.
  */
 export function resolverItensDoModelo(
   modelo: Modelo,
@@ -338,16 +341,24 @@ export function resolverItensDoModelo(
   const itens: ItemParaAplicar[] = [];
   const indisponiveis: string[] = [];
 
-  for (const produtoId of modelo.produtoIds) {
-    const linha = porId.get(produtoId);
+  for (const itemModelo of modelo.itens) {
+    const linha = porId.get(itemModelo.produtoId);
     if (!linha || !linha.habilitacao.disponivel) {
-      indisponiveis.push(nomePorId.get(produtoId) ?? produtoId);
+      indisponiveis.push(nomePorId.get(itemModelo.produtoId) ?? itemModelo.produtoId);
       continue;
     }
 
-    const anos = anosEfetivos(linha.habilitacao, linha.habilitacao.opcionais);
+    const anos = anosEfetivos(linha.habilitacao, itemModelo.anos);
+    // Os anos escolhidos no modelo não cruzam com nada que esta regional
+    // habilite pra este produto (e ele não tem obrigatório aqui) — nada pra
+    // marcar, então fica de fora como indisponível, não como um item vazio.
+    if (anos.length === 0) {
+      indisponiveis.push(linha.produto.nome);
+      continue;
+    }
+
     const decisao: DecisaoLocal = {
-      anos: linha.habilitacao.opcionais,
+      anos: itemModelo.anos,
       recusado: false,
       // Cobrança por crédito não tem valor padrão no catálogo — 1 crédito
       // por aluno é o ponto de partida mais neutro, e cada ano segue

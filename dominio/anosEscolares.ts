@@ -109,6 +109,19 @@ export function anosOfertados(previsao: PrevisaoPorAno): AnoEscolarId[] {
 }
 
 /**
+ * Resumo curto de uma lista de anos escolares — pra rótulo de chip ou linha
+ * de card, não pra tabela. "Todos os anos" quando cobre o catálogo inteiro;
+ * senão os rótulos curtos, na ordem pedagógica.
+ */
+export function descreverAnos(anos: readonly AnoEscolarId[]): string {
+  if (anos.length === 0) return 'nenhum ano';
+  if (anos.length === ANOS_ESCOLARES.length) return 'todos os anos';
+  return ordenarAnos(anos)
+    .map((id) => anoEscolar(id).curto)
+    .join(', ');
+}
+
+/**
  * Sobrepõe a previsão com uma quantidade de licenças ajustada manualmente,
  * um ano de cada vez — só para os anos informados, e só quando o valor é um
  * inteiro não negativo válido. Existe para uma solução poder ser contratada

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Botao, Campo, Entrada, EsqueletoLinhas, EstadoVazio, Selecao } from '@/componentes/ui';
+import { Botao, Campo, Entrada, EsqueletoLinhas, EstadoVazio, Selecao, juntar } from '@/componentes/ui';
 import {
   atualizarModelo,
   criarModelo,
@@ -8,8 +8,10 @@ import {
   listarProdutos,
   obterModelo,
 } from '@/lib/dados';
-import type { Fornecedor, Produto, Visibilidade } from '@dominio/tipos';
+import type { Fornecedor, ItemModelo, Produto, Visibilidade } from '@dominio/tipos';
 import { descreverPreco } from '@dominio/preco';
+import { ANOS_ESCOLARES, SEGMENTOS, anosDoSegmento, ordenarAnos } from '@dominio/anosEscolares';
+import type { AnoEscolarId } from '@dominio/anosEscolares';
 import { useAdmin } from './LayoutAdmin';
 
 /**
@@ -18,14 +20,21 @@ import { useAdmin } from './LayoutAdmin';
  * fixa. Nada aqui restringe a categoria das soluções escolhidas, mas na
  * prática modelo só existe pra avaliação — é por isso que os textos falam
  * em "avaliações" em vez de "soluções" em geral.
+ *
+ * Cada avaliação do pacote carrega seus próprios anos escolares — não é
+ * herdado da habilitação de nenhuma regional (o modelo é do ciclo, não de
+ * uma regional específica). Na hora de aplicar, esses anos ainda passam
+ * pelo crivo do que a regional do gestor realmente habilita.
  */
+
+const TODOS_OS_ANOS: AnoEscolarId[] = ANOS_ESCOLARES.map((a) => a.id);
 
 interface Rascunho {
   nome: string;
   descricao: string;
   categoria: string;
   visibilidade: Visibilidade;
-  produtoIds: string[];
+  itens: ItemModelo[];
 }
 
 const VAZIO: Rascunho = {
@@ -33,7 +42,7 @@ const VAZIO: Rascunho = {
   descricao: '',
   categoria: 'Avaliação',
   visibilidade: 'rascunho',
-  produtoIds: [],
+  itens: [],
 };
 
 export function ModeloForm() {
@@ -72,7 +81,7 @@ export function ModeloForm() {
           descricao: modelo.descricao,
           categoria: modelo.categoria,
           visibilidade: modelo.visibilidade,
-          produtoIds: modelo.produtoIds,
+          itens: modelo.itens,
         });
       }
     } catch {
@@ -87,6 +96,11 @@ export function ModeloForm() {
   }, [carregar]);
 
   const nomeFornecedor = (id: string) => fornecedores.find((f) => f.id === id)?.nome ?? '—';
+  const nomeProduto = (id: string) => produtos.find((p) => p.id === id)?.nome ?? '(solução removida)';
+
+  // Ordem do catálogo — mesma sequência que o gestor vê na etapa de escolha,
+  // reaproveitada tanto pra listar "anos por avaliação" quanto pra salvar.
+  const ordemCatalogo = useMemo(() => new Map(produtos.map((p, i) => [p.id, i])), [produtos]);
 
   const produtosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -108,12 +122,55 @@ export function ModeloForm() {
     return [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b, 'pt-BR'));
   }, [produtosFiltrados]);
 
-  function alternarProduto(id: string) {
+  // Os itens já escolhidos, na ordem do catálogo — é nessa ordem que a
+  // seção "anos por avaliação" lista pra ficar previsível de achar.
+  const itensNaOrdemDoCatalogo = useMemo(
+    () =>
+      [...rascunho.itens].sort(
+        (a, b) => (ordemCatalogo.get(a.produtoId) ?? 0) - (ordemCatalogo.get(b.produtoId) ?? 0),
+      ),
+    [rascunho.itens, ordemCatalogo],
+  );
+
+  function alternarProduto(produtoId: string) {
+    setRascunho((r) => {
+      const jaTem = r.itens.some((i) => i.produtoId === produtoId);
+      return {
+        ...r,
+        // Nasce sem nenhum ano marcado — o catálogo não sabe pra quais anos
+        // esta avaliação faz sentido, então "todos" por padrão só empilhava
+        // anos que nunca se aplicam a ela (uma avaliação do Médio herdando
+        // Educação Infantil, por exemplo). "Marcar todos" abaixo cobre o
+        // caso oposto, o de uma avaliação que vale pra todo mundo, num clique.
+        itens: jaTem
+          ? r.itens.filter((i) => i.produtoId !== produtoId)
+          : [...r.itens, { produtoId, anos: [] }],
+      };
+    });
+  }
+
+  function alternarAno(produtoId: string, ano: AnoEscolarId) {
     setRascunho((r) => ({
       ...r,
-      produtoIds: r.produtoIds.includes(id)
-        ? r.produtoIds.filter((p) => p !== id)
-        : [...r.produtoIds, id],
+      itens: r.itens.map((i) =>
+        i.produtoId !== produtoId
+          ? i
+          : {
+              ...i,
+              anos: i.anos.includes(ano)
+                ? i.anos.filter((a) => a !== ano)
+                : ordenarAnos([...i.anos, ano]),
+            },
+      ),
+    }));
+  }
+
+  function definirTodosOsAnos(produtoId: string, marcarTodos: boolean) {
+    setRascunho((r) => ({
+      ...r,
+      itens: r.itens.map((i) =>
+        i.produtoId !== produtoId ? i : { ...i, anos: marcarTodos ? TODOS_OS_ANOS : [] },
+      ),
     }));
   }
 
@@ -123,16 +180,17 @@ export function ModeloForm() {
     setErro(null);
     try {
       if (!rascunho.nome.trim()) throw new Error('O modelo precisa de um nome.');
-      if (rascunho.produtoIds.length === 0) {
+      if (rascunho.itens.length === 0) {
         throw new Error('Marque pelo menos uma avaliação para o modelo.');
       }
+      const semAno = rascunho.itens.find((i) => i.anos.length === 0);
+      if (semAno) {
+        throw new Error(
+          `"${nomeProduto(semAno.produtoId)}" está sem nenhum ano escolar marcado — escolha ao menos um ou desmarque a avaliação.`,
+        );
+      }
 
-      // Mantém a ordem do catálogo — mesma sequência que o gestor vê na
-      // etapa de escolha, não a ordem em que foram marcadas aqui.
-      const ordemCatalogo = new Map(produtos.map((p, i) => [p.id, i]));
-      const produtoIds = [...rascunho.produtoIds].sort(
-        (a, b) => (ordemCatalogo.get(a) ?? 0) - (ordemCatalogo.get(b) ?? 0),
-      );
+      const itens = itensNaOrdemDoCatalogo.map((i) => ({ ...i, anos: ordenarAnos(i.anos) }));
 
       const dados = {
         cicloId: ciclo.id,
@@ -140,7 +198,7 @@ export function ModeloForm() {
         descricao: rascunho.descricao.trim(),
         categoria: rascunho.categoria.trim() || 'Avaliação',
         visibilidade: rascunho.visibilidade,
-        produtoIds,
+        itens,
       };
 
       if (editando) await atualizarModelo(modeloId!, dados);
@@ -177,7 +235,7 @@ export function ModeloForm() {
     );
   }
 
-  const selecionados = new Set(rascunho.produtoIds);
+  const selecionados = new Set(rascunho.itens.map((i) => i.produtoId));
 
   return (
     <div className="flex flex-col gap-6 pb-24">
@@ -193,10 +251,11 @@ export function ModeloForm() {
           {editando ? 'Editar modelo' : 'Novo modelo'}
         </h1>
         <p className="max-w-prose text-sm text-gray-500">
-          Marque as avaliações que entram juntas neste pacote fechado. Ao aplicar o modelo, o
-          gestor marca todas de uma vez, em todos os anos habilitados pra regional dele, puxando a
-          previsão de alunos automaticamente — e o pacote fica travado: pra ajustar qualquer
-          avaliação depois, é preciso remover o modelo inteiro, não mexer nela isolada.
+          Marque as avaliações que entram juntas neste pacote fechado, e em quais anos escolares
+          cada uma se aplica. Ao aplicar o modelo, o gestor marca tudo de uma vez — cada avaliação
+          nos anos escolhidos aqui que a regional dele também habilitar, com a previsão de alunos
+          puxada automaticamente. O pacote fica travado: pra ajustar qualquer avaliação depois, é
+          preciso remover o modelo inteiro, não mexer nela isolada.
         </p>
       </div>
 
@@ -253,7 +312,7 @@ export function ModeloForm() {
         <legend className="px-1 text-sm font-medium text-gray-700">
           Avaliações do pacote
           <span className="ml-2 font-normal text-gray-500">
-            {rascunho.produtoIds.length} selecionada{rascunho.produtoIds.length === 1 ? '' : 's'}
+            {rascunho.itens.length} selecionada{rascunho.itens.length === 1 ? '' : 's'}
           </span>
         </legend>
 
@@ -263,7 +322,7 @@ export function ModeloForm() {
           placeholder="Buscar por nome, categoria ou fornecedor…"
         />
 
-        <div className="flex max-h-[28rem] flex-col gap-4 overflow-y-auto pr-1">
+        <div className="flex max-h-[24rem] flex-col gap-4 overflow-y-auto pr-1">
           {porCategoria.length === 0 ? (
             <p className="py-4 text-center text-sm text-gray-500">Nenhuma solução encontrada.</p>
           ) : (
@@ -301,6 +360,72 @@ export function ModeloForm() {
           )}
         </div>
       </fieldset>
+
+      {itensNaOrdemDoCatalogo.length > 0 && (
+        <fieldset className="flex flex-col gap-4 rounded-xl border border-gray-200 p-4">
+          <legend className="px-1 text-sm font-medium text-gray-700">Anos por avaliação</legend>
+          <p className="-mt-2 text-xs text-gray-500">
+            Em quais anos escolares cada avaliação entra ao aplicar o modelo — nasce sem nenhum
+            marcado, "marcar todos" resolve o caso de uma avaliação que vale pra rede inteira. Um
+            ano marcado aqui que a regional do gestor não habilitar pra esta avaliação
+            simplesmente não entra.
+          </p>
+
+          <div className="flex flex-col gap-4 divide-y divide-gray-100">
+            {itensNaOrdemDoCatalogo.map((item) => {
+              const todosMarcados = item.anos.length === TODOS_OS_ANOS.length;
+              return (
+                <div key={item.produtoId} className="flex flex-col gap-2 pt-4 first:pt-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-gray-800">
+                      {nomeProduto(item.produtoId)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => definirTodosOsAnos(item.produtoId, !todosMarcados)}
+                      className="text-xs text-brand-medium hover:underline"
+                    >
+                      {todosMarcados ? 'limpar' : 'marcar todos'}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    {SEGMENTOS.map((seg) => (
+                      <div
+                        key={seg.id}
+                        className="grid gap-2 sm:grid-cols-[160px_1fr] sm:items-center"
+                      >
+                        <span className="text-xs text-gray-500">{seg.nome}</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {anosDoSegmento(seg.id).map((ano) => {
+                            const ligado = item.anos.includes(ano.id);
+                            return (
+                              <button
+                                key={ano.id}
+                                type="button"
+                                aria-pressed={ligado}
+                                onClick={() => alternarAno(item.produtoId, ano.id)}
+                                className={juntar(
+                                  'rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors',
+                                  ligado
+                                    ? 'border-brand-medium bg-brand-medium text-white'
+                                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300',
+                                )}
+                              >
+                                {ano.curto}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
 
       {erro && (
         <p role="alert" className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800">

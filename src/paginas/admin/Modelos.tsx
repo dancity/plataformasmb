@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DialogoConfirmacao } from '@/componentes/Modal';
 import { Botao, Cartao, EsqueletoLinhas, EstadoVazio, Selo } from '@/componentes/ui';
 import { excluirModelo, listarModelos, listarProdutos } from '@/lib/dados';
+import { descreverAnos } from '@dominio/anosEscolares';
 import type { Modelo, Produto } from '@dominio/tipos';
 import { useAdmin } from './LayoutAdmin';
 
@@ -123,8 +124,8 @@ export function Modelos() {
                     </Selo>
                   </div>
                   <span className="text-sm text-gray-500">
-                    {m.categoria} · {m.produtoIds.length} avaliaç
-                    {m.produtoIds.length === 1 ? 'ão' : 'ões'}
+                    {m.categoria} · {m.itens.length} avaliaç
+                    {m.itens.length === 1 ? 'ão' : 'ões'}
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -144,12 +145,13 @@ export function Modelos() {
               {m.descricao && <p className="text-sm text-gray-500">{m.descricao}</p>}
 
               <div className="flex flex-wrap gap-1.5">
-                {m.produtoIds.map((id) => (
+                {m.itens.map((item) => (
                   <span
-                    key={id}
+                    key={item.produtoId}
                     className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600"
                   >
-                    {nomeProduto(id)}
+                    {nomeProduto(item.produtoId)}{' '}
+                    <span className="text-gray-400">· {descreverAnos(item.anos)}</span>
                   </span>
                 ))}
               </div>
@@ -167,8 +169,8 @@ export function Modelos() {
           excluindo && (
             <div className="flex flex-col gap-1">
               <span>
-                <strong>{excluindo.nome}</strong> · {excluindo.produtoIds.length} avaliaç
-                {excluindo.produtoIds.length === 1 ? 'ão' : 'ões'}
+                <strong>{excluindo.nome}</strong> · {excluindo.itens.length} avaliaç
+                {excluindo.itens.length === 1 ? 'ão' : 'ões'}
               </span>
               <span className="text-xs">
                 Pedidos já preenchidos a partir deste modelo não mudam — a decisão já foi gravada
