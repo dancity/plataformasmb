@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/componentes/Modal';
 import {
+  AreaTexto,
   Botao,
   Campo,
   Cartao,
@@ -10,8 +11,16 @@ import {
   Selecao,
   Selo,
 } from '@/componentes/ui';
-import { atualizarUnidade, criarUnidade, listarRegionais, listarUnidades } from '@/lib/dados';
-import type { Regional, TipoUnidade, Unidade } from '@dominio/tipos';
+import {
+  MANTENEDORAS_PADRAO,
+  atualizarUnidade,
+  criarUnidade,
+  criarUnidadesEmLote,
+  listarRegionais,
+  listarUnidades,
+} from '@/lib/dados';
+import { analisarColagem, type ResultadoImportacao } from '@/lib/importarUnidades';
+import type { Mantenedora, Regional, TipoUnidade, Unidade } from '@dominio/tipos';
 
 const SELO_TIPO = {
   paga: { tom: 'neutro', rotulo: 'paga' },
@@ -31,6 +40,16 @@ export function Unidades() {
   const [codigo, setCodigo] = useState('');
   const [regionalId, setRegionalId] = useState('');
   const [tipo, setTipo] = useState<TipoUnidade>('paga');
+  const [mantenedora, setMantenedora] = useState<Mantenedora | ''>('');
+
+  const [importarAberto, setImportarAberto] = useState(false);
+  const [colado, setColado] = useState('');
+  const [analise, setAnalise] = useState<ResultadoImportacao | null>(null);
+  const [importando, setImportando] = useState(false);
+  const [resumoImportacao, setResumoImportacao] = useState<{
+    criadas: number;
+    existentes: number;
+  } | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -77,6 +96,7 @@ export function Unidades() {
     setCodigo('');
     setRegionalId('');
     setTipo('paga');
+    setMantenedora('');
     setErro(null);
     setAberto(true);
   }
@@ -88,6 +108,7 @@ export function Unidades() {
     setRegionalId(u.regionalId);
     // Cadastrada antes deste campo existir conta como paga, a mais comum.
     setTipo(u.tipo ?? 'paga');
+    setMantenedora(u.mantenedora ?? '');
     setErro(null);
     setAberto(true);
   }
@@ -100,10 +121,15 @@ export function Unidades() {
       if (!regionalId) throw new Error('Escolha a regional.');
 
       if (editando) {
-        await atualizarUnidade(editando.id, { nome: nome.trim(), regionalId, tipo });
+        await atualizarUnidade(editando.id, {
+          nome: nome.trim(),
+          regionalId,
+          tipo,
+          ...(mantenedora ? { mantenedora } : {}),
+        });
       } else {
         if (!codigo.trim()) throw new Error('O código identifica a unidade — não pode ficar vazio.');
-        await criarUnidade({ nome, codigo, regionalId, tipo });
+        await criarUnidade({ nome, codigo, regionalId, tipo, mantenedora: mantenedora || undefined });
       }
       setAberto(false);
       await carregar();
@@ -127,12 +153,27 @@ export function Unidades() {
             preço social das soluções que tiverem um cadastrado.
           </p>
         </div>
-        <Botao onClick={abrirNova} disabled={regionais.length === 0}>
-          Nova unidade
-        </Botao>
+        <div className="flex gap-2">
+          <Botao
+            variante="secundario"
+            onClick={() => {
+              setColado('');
+              setAnalise(null);
+              setResumoImportacao(null);
+              setErro(null);
+              setImportarAberto(true);
+            }}
+            disabled={regionais.length === 0}
+          >
+            Importar em lote
+          </Botao>
+          <Botao onClick={abrirNova} disabled={regionais.length === 0}>
+            Nova unidade
+          </Botao>
+        </div>
       </div>
 
-      {erro && !aberto && (
+      {erro && !aberto && !importarAberto && (
         <p role="alert" className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800">
           {erro}
         </p>
@@ -148,8 +189,24 @@ export function Unidades() {
         <EstadoVazio
           icone={<span aria-hidden="true">🏫</span>}
           titulo="Nenhuma unidade cadastrada"
-          descricao="São 97 na rede. Comece por uma para testar o fluxo inteiro de ponta a ponta; a carga em massa por planilha entra depois, quando a lista oficial estiver fechada."
-          acao={<Botao onClick={abrirNova}>Cadastrar uma unidade</Botao>}
+          descricao="São 97 na rede. Use o botão “Importar em lote” pra colar a planilha oficial de uma vez, ou cadastre uma por uma pelo botão “Nova unidade”."
+          acao={
+            <div className="flex gap-2">
+              <Botao
+                variante="secundario"
+                onClick={() => {
+                  setColado('');
+                  setAnalise(null);
+                  setResumoImportacao(null);
+                  setErro(null);
+                  setImportarAberto(true);
+                }}
+              >
+                Importar em lote
+              </Botao>
+              <Botao onClick={abrirNova}>Cadastrar uma unidade</Botao>
+            </div>
+          }
         />
       ) : (
         <>
@@ -178,7 +235,10 @@ export function Unidades() {
                   <span className="font-medium text-gray-700">{u.nome}</span>
                   <Selo tom={SELO_TIPO[u.tipo ?? 'paga'].tom}>{SELO_TIPO[u.tipo ?? 'paga'].rotulo}</Selo>
                 </div>
-                <span className="text-xs text-gray-500">{nomeRegional(u.regionalId)}</span>
+                <span className="text-xs text-gray-500">
+                  {nomeRegional(u.regionalId)}
+                  {u.mantenedora ? ` · ${u.mantenedora}` : ''}
+                </span>
                 <span className="font-mono text-xs text-gray-400">{u.codigo}</span>
                 <button
                   type="button"
@@ -254,7 +314,123 @@ export function Unidades() {
             <option value="social">Social</option>
           </Selecao>
         </Campo>
+        <Campo rotulo="Mantenedora">
+          <Selecao
+            value={mantenedora}
+            onChange={(e) => setMantenedora(e.target.value as Mantenedora | '')}
+          >
+            <option value="">Não informada</option>
+            {MANTENEDORAS_PADRAO.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </Selecao>
+        </Campo>
         {erro && (
+          <p role="alert" className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800">
+            {erro}
+          </p>
+        )}
+      </Modal>
+
+      <Modal
+        aberto={importarAberto}
+        aoFechar={() => setImportarAberto(false)}
+        titulo="Importar unidades em lote"
+        rodape={
+          <>
+            <Botao
+              variante="secundario"
+              onClick={() => setImportarAberto(false)}
+              disabled={importando}
+            >
+              Fechar
+            </Botao>
+            {analise && (
+              <Botao
+                onClick={() => {
+                  const prontas = analise.prontas;
+                  setImportando(true);
+                  void criarUnidadesEmLote(prontas)
+                    .then((resumo) => {
+                      setResumoImportacao(resumo);
+                      setColado('');
+                      setAnalise(null);
+                      return carregar();
+                    })
+                    .catch(() => setErro('Não foi possível importar. Tente de novo.'))
+                    .finally(() => setImportando(false));
+                }}
+                disabled={analise.erros.length > 0 || analise.prontas.length === 0}
+                carregando={importando}
+              >
+                Confirmar importação
+              </Botao>
+            )}
+          </>
+        }
+      >
+        <p className="text-sm text-gray-500">
+          Cole aqui as colunas <strong>Unidade</strong>, <strong>Mantenedora</strong>,{' '}
+          <strong>Regional</strong> e <strong>Pago | Social</strong>, direto do Excel — cabeçalho
+          e linhas repetidas (uma por ano escolar, por exemplo) não atrapalham: a mesma unidade
+          colapsa numa só. Unidade que já existe no cadastro é pulada, nunca sobrescrita.
+        </p>
+        <Campo rotulo="Dados colados">
+          <AreaTexto
+            value={colado}
+            onChange={(e) => {
+              setColado(e.target.value);
+              setAnalise(null);
+              setResumoImportacao(null);
+            }}
+            rows={10}
+            placeholder={'Colégio Marista Boa Viagem\tABEC\tRecife\tPago'}
+          />
+        </Campo>
+        {!analise && (
+          <Botao
+            variante="secundario"
+            onClick={() => setAnalise(analisarColagem(colado))}
+            disabled={!colado.trim()}
+          >
+            Analisar
+          </Botao>
+        )}
+        {analise && (
+          <div className="flex flex-col gap-2 rounded-lg bg-gray-50 p-3 text-sm">
+            <span className="font-medium text-gray-700">
+              {analise.prontas.length} unidade{analise.prontas.length === 1 ? '' : 's'} pronta
+              {analise.prontas.length === 1 ? '' : 's'} pra importar
+              {analise.erros.length > 0 && ` · ${analise.erros.length} com problema`}
+            </span>
+            {analise.erros.length > 0 && (
+              <ul className="flex flex-col gap-0.5 text-xs text-red-700">
+                {analise.erros.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              onClick={() => setAnalise(null)}
+              className="w-fit text-xs text-brand-medium hover:underline"
+            >
+              Analisar de novo
+            </button>
+          </div>
+        )}
+        {resumoImportacao && (
+          <p role="status" className="rounded-lg bg-green-100 px-3 py-2 text-sm text-green-800">
+            {resumoImportacao.criadas} unidade{resumoImportacao.criadas === 1 ? '' : 's'}{' '}
+            criada{resumoImportacao.criadas === 1 ? '' : 's'}
+            {resumoImportacao.existentes > 0 &&
+              ` · ${resumoImportacao.existentes} já existia${resumoImportacao.existentes === 1 ? '' : 'm'} e foi(ram) pulada(s)`}
+            .
+          </p>
+        )}
+        {erro && importarAberto && (
           <p role="alert" className="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800">
             {erro}
           </p>

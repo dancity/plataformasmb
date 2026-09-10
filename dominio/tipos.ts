@@ -69,6 +69,13 @@ export interface Regional {
  */
 export type TipoUnidade = 'paga' | 'social';
 
+/**
+ * Entidade jurídica mantenedora da unidade — não é a regional (que é
+ * administrativa) nem o fornecedor (que é da solução). Lista fixa: mudar
+ * exige alterar o código, igual às regionais.
+ */
+export type Mantenedora = 'ABEC' | 'SOME' | 'UBEE' | 'UNBEC';
+
 export interface Unidade {
   id: string;
   nome: string;
@@ -76,6 +83,8 @@ export interface Unidade {
   regionalId: string;
   ativa: boolean;
   tipo?: TipoUnidade;
+  /** Opcional pra não quebrar unidade cadastrada antes deste campo existir. */
+  mantenedora?: Mantenedora;
 }
 
 export interface Fornecedor {

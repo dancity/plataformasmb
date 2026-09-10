@@ -19,6 +19,7 @@ import type {
   EstadoCiclo,
   Fornecedor,
   ItemModelo,
+  Mantenedora,
   Modelo,
   Obrigatoriedade,
   Produto,
@@ -29,6 +30,7 @@ import type {
 } from '@dominio/tipos';
 import { ANOS_ESCOLARES } from '@dominio/anosEscolares';
 import { db } from './firebase';
+import { slugificar } from './slug';
 
 /**
  * Leitura e escrita do catálogo. Só o admin escreve aqui, e as regras do
@@ -71,6 +73,9 @@ export async function semearRegionais(): Promise<number> {
 
 // ─── Unidades ────────────────────────────────────────────────────
 
+/** As quatro mantenedoras da rede. Lista fixa, igual às regionais. */
+export const MANTENEDORAS_PADRAO: readonly Mantenedora[] = ['ABEC', 'SOME', 'UBEE', 'UNBEC'];
+
 export async function listarUnidades(regionalId?: string): Promise<Unidade[]> {
   const base = collection(db, 'unidades');
   const consulta = regionalId
@@ -85,13 +90,15 @@ export async function criarUnidade(dados: {
   codigo: string;
   regionalId: string;
   tipo: TipoUnidade;
+  mantenedora?: Mantenedora;
 }): Promise<string> {
-  const id = dados.codigo.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const id = slugificar(dados.codigo);
   await setDoc(doc(db, 'unidades', id), {
     nome: dados.nome.trim(),
     codigo: dados.codigo.trim(),
     regionalId: dados.regionalId,
     tipo: dados.tipo,
+    ...(dados.mantenedora ? { mantenedora: dados.mantenedora } : {}),
     ativa: true,
   });
   return id;
@@ -99,9 +106,54 @@ export async function criarUnidade(dados: {
 
 export async function atualizarUnidade(
   id: string,
-  dados: Partial<{ nome: string; regionalId: string; tipo: TipoUnidade; ativa: boolean }>,
+  dados: Partial<{
+    nome: string;
+    regionalId: string;
+    tipo: TipoUnidade;
+    mantenedora: Mantenedora;
+    ativa: boolean;
+  }>,
 ): Promise<void> {
   await updateDoc(doc(db, 'unidades', id), { ...dados });
+}
+
+export interface UnidadeParaImportar {
+  nome: string;
+  codigo: string;
+  regionalId: string;
+  tipo: TipoUnidade;
+  mantenedora: Mantenedora;
+}
+
+/**
+ * Carga em massa a partir da planilha oficial da rede. Idempotente por id
+ * (= código gerado do nome): unidade que já existe é pulada, nunca
+ * sobrescrita — se alguém já editou algo nela pela tela, a importação não
+ * apaga por cima.
+ */
+export async function criarUnidadesEmLote(
+  itens: readonly UnidadeParaImportar[],
+): Promise<{ criadas: number; existentes: number }> {
+  const jaExistem = new Set((await listarUnidades()).map((u) => u.id));
+  const novas = itens.filter((item) => !jaExistem.has(item.codigo));
+
+  const TAMANHO_LOTE = 400; // margem sob o limite de 500 escritas por batch do Firestore
+  for (let i = 0; i < novas.length; i += TAMANHO_LOTE) {
+    const lote = writeBatch(db);
+    for (const item of novas.slice(i, i + TAMANHO_LOTE)) {
+      lote.set(doc(db, 'unidades', item.codigo), {
+        nome: item.nome,
+        codigo: item.codigo,
+        regionalId: item.regionalId,
+        tipo: item.tipo,
+        mantenedora: item.mantenedora,
+        ativa: true,
+      });
+    }
+    await lote.commit();
+  }
+
+  return { criadas: novas.length, existentes: itens.length - novas.length };
 }
 
 // ─── Ciclos ──────────────────────────────────────────────────────

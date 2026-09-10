@@ -1,4 +1,10 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from 'react';
 import { useTema } from '@/lib/tema';
 
 /**
@@ -166,6 +172,13 @@ const CLASSES_ENTRADA =
 
 export function Entrada({ className, ...resto }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...resto} className={juntar(CLASSES_ENTRADA, className)} />;
+}
+
+export function AreaTexto({
+  className,
+  ...resto
+}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...resto} className={juntar(CLASSES_ENTRADA, 'font-mono', className)} />;
 }
 
 export function Selecao({
