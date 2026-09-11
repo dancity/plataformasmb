@@ -255,7 +255,7 @@ export function SolucaoForm() {
       if (!rascunho.fornecedorId) throw new Error('Escolha o fornecedor.');
 
       const valor = reaisParaCentavos(rascunho.valorTexto || '0');
-      if (valor <= 0) throw new Error('O preço precisa ser maior que zero.');
+      if (valor < 0) throw new Error('O preço não pode ser negativo.');
 
       const meses = Number(rascunho.meses);
       if (rascunho.cicloCobranca === 'mensal' && (!Number.isInteger(meses) || meses < 1 || meses > 12)) {
@@ -268,7 +268,7 @@ export function SolucaoForm() {
       let precificacaoSocial: Precificacao | undefined;
       if (rascunho.precoSocialHabilitado) {
         const valorSocial = reaisParaCentavos(rascunho.valorTextoSocial || '0');
-        if (valorSocial <= 0) throw new Error('O preço social precisa ser maior que zero.');
+        if (valorSocial < 0) throw new Error('O preço social não pode ser negativo.');
         const mesesSocial = Number(rascunho.mesesSocial);
         if (
           rascunho.cicloCobrancaSocial === 'mensal' &&
@@ -288,7 +288,7 @@ export function SolucaoForm() {
       } else if (rascunho.valorTextoSocial.trim()) {
         try {
           const valorSocial = reaisParaCentavos(rascunho.valorTextoSocial);
-          if (valorSocial > 0) {
+          if (valorSocial >= 0) {
             const mesesSocial = Number(rascunho.mesesSocial);
             precificacaoSocial = {
               base: rascunho.baseSocial,
