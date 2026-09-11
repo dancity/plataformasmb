@@ -26,7 +26,7 @@ export function Modal({
   descricao?: string;
   children?: ReactNode;
   rodape?: ReactNode;
-  largura?: 'sm' | 'md' | 'lg' | 'xl';
+  largura?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl';
 }) {
   const idTitulo = useId();
   const caixa = useRef<HTMLDivElement>(null);
@@ -55,7 +55,15 @@ export function Modal({
 
   if (!aberto) return null;
 
-  const LARGURA = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' } as const;
+  // xxl é para grade de dados (linha × coluna) — as outras larguras são para
+  // texto e formulário, onde uma caixa mais estreita lê melhor.
+  const LARGURA = {
+    sm: 'max-w-md',
+    md: 'max-w-lg',
+    lg: 'max-w-2xl',
+    xl: 'max-w-4xl',
+    xxl: 'max-w-[min(92vw,80rem)]',
+  } as const;
 
   return createPortal(
     <div

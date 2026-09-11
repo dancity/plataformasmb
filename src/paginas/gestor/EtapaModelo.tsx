@@ -268,7 +268,7 @@ export function EtapaModelo({
         aoFechar={() => setModeloVisualizando(null)}
         titulo={modeloVisualizando?.nome ?? ''}
         descricao={modeloVisualizando?.descricao || 'Em quais anos escolares cada avaliação entra, para a sua regional.'}
-        largura="xl"
+        largura="xxl"
         rodape={
           <>
             <Botao variante="secundario" onClick={() => setModeloVisualizando(null)}>
@@ -418,47 +418,62 @@ function GradeModelo({
     );
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="sticky left-0 bg-white p-2 text-left text-xs font-medium text-gray-500">
-              Avaliação
-            </th>
-            {colunas.map((ano) => (
-              <th
-                key={ano}
-                className="min-w-12 bg-gray-100 p-2 text-center text-xs font-medium text-gray-600"
-              >
-                {anoEscolar(ano).curto}
+    <div className="flex flex-col gap-1.5">
+      {/* max-height própria + overflow aqui (não só no wrapper do Modal) é o
+          que permite o cabeçalho ficar sticky ao rolar — e com nome truncado
+          numa linha só, em vez de três, a grade toda costuma caber sem rolar
+          em telas de laptop pra cima. */}
+      <div className="max-h-[65vh] overflow-auto rounded-lg border border-gray-200">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <th className="sticky top-0 left-0 z-20 w-44 border-b border-gray-200 bg-white px-3 py-2 text-left text-xs font-medium text-gray-500 sm:w-56">
+                Avaliação
               </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {itens.map(({ produto, habilitacao, decisao }) => {
-            const anos = new Set(anosEfetivos(habilitacao, decisao.anos));
-            return (
-              <tr key={produto.id} className="border-t border-gray-200">
-                <td className="sticky left-0 bg-white p-2 text-gray-700">{produto.nome}</td>
-                {colunas.map((ano) => (
-                  <td key={ano} className="p-2 text-center">
-                    {anos.has(ano) && (
-                      <span
-                        aria-hidden="true"
-                        className={juntar('mx-auto block h-2.5 w-2.5 rounded-full bg-brand-medium')}
-                      />
-                    )}
-                    <span className="sr-only">
-                      {anos.has(ano) ? `${produto.nome} entra em ${ano}` : `${produto.nome} não entra em ${ano}`}
+              {colunas.map((ano) => (
+                <th
+                  key={ano}
+                  className="sticky top-0 z-10 min-w-9 border-b border-gray-200 bg-gray-100 px-1 py-2 text-center text-xs font-medium text-gray-600"
+                >
+                  {anoEscolar(ano).curto}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {itens.map(({ produto, habilitacao, decisao }) => {
+              const anos = new Set(anosEfetivos(habilitacao, decisao.anos));
+              return (
+                <tr key={produto.id} className="border-t border-gray-200">
+                  <td className="sticky left-0 z-10 w-44 bg-white px-3 py-1.5 sm:w-56">
+                    <span className="block truncate text-gray-700" title={produto.nome}>
+                      {produto.nome}
                     </span>
                   </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  {colunas.map((ano) => (
+                    <td key={ano} className="px-1 py-1.5 text-center">
+                      {anos.has(ano) && (
+                        <span
+                          aria-hidden="true"
+                          className={juntar('mx-auto block h-2.5 w-2.5 rounded-full bg-brand-medium')}
+                        />
+                      )}
+                      <span className="sr-only">
+                        {anos.has(ano) ? `${produto.nome} entra em ${ano}` : `${produto.nome} não entra em ${ano}`}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {colunas.length > 6 && (
+        <p className="text-xs text-gray-400 sm:hidden">
+          Arraste a tabela para o lado para ver todos os anos escolares.
+        </p>
+      )}
     </div>
   );
 }
