@@ -160,6 +160,8 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       recusado: boolean;
       creditosPorAno?: PrevisaoPorAno;
       licencasPorAno?: PrevisaoPorAno;
+      origemModeloId?: string;
+      origemModeloNome?: string;
     }
   >();
   for (const doc of itensSnap.docs) {
@@ -178,6 +180,11 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       // não negativo, então não há o que validar além disso aqui.
       licencasPorAno:
         item.alunosPorAno && typeof item.alunosPorAno === 'object' ? item.alunosPorAno : undefined,
+      // Preserva de onde veio a decisão — o mapa agrupa por modelo, e essa
+      // marca não pode sumir só porque o item foi recalculado no envio.
+      origemModeloId: typeof item.origemModeloId === 'string' ? item.origemModeloId : undefined,
+      origemModeloNome:
+        typeof item.origemModeloNome === 'string' ? item.origemModeloNome : undefined,
     });
   }
 
@@ -218,6 +225,9 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
         origem: 'recusado',
         decisao: 'pendente',
         atualizadoEm: agora(),
+        ...(escolha?.origemModeloId
+          ? { origemModeloId: escolha.origemModeloId, origemModeloNome: escolha.origemModeloNome }
+          : {}),
       };
       lote.set(itemRef, recusado);
       continue;
@@ -264,6 +274,9 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       decisao: 'pendente',
       atualizadoEm: agora(),
       ...(creditosPorAno ? { creditosPorAno } : {}),
+      ...(escolha?.origemModeloId
+        ? { origemModeloId: escolha.origemModeloId, origemModeloNome: escolha.origemModeloNome }
+        : {}),
     };
     lote.set(itemRef, item);
 

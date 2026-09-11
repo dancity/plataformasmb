@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Botao, Cartao, Entrada, EstadoVazio, Selo, juntar } from '@/componentes/ui';
-import { DialogoConfirmacao } from '@/componentes/Modal';
 import type { Sessao } from '@/lib/auth';
-import { listarModelosPublicados } from '@/lib/dados';
-import { calcularLinhas, resolverItensDoModelo, somarTotais } from '@/lib/pedido';
+import { calcularLinhas, somarTotais } from '@/lib/pedido';
 import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
 import { SEGMENTOS, anoEscolar, anosDoSegmento, aplicarLicencas, ordenarAnos } from '@dominio/anosEscolares';
 import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
 import { calcularItem, descreverPreco, formatarBRL } from '@dominio/preco';
-import type { Modelo } from '@dominio/tipos';
+import { CATEGORIA_AVALIACAO_LARGA_ESCALA } from '@dominio/tipos';
 
 /**
- * Etapa 2 — uma solução por vez.
+ * Etapa 3 — soluções adicionais, uma de cada vez.
  *
- * Treze soluções cabem numa sequência de treze telas leves, e cada tela ganha
- * espaço para o que a decisão exige: descrição, preço explicado e os anos
- * escolares como alvos grandes. Uma grade densa economiza rolagem e cobra o
- * preço em erro de leitura.
+ * Tudo o que não é avaliação em larga escala (essa é a etapa 2, por
+ * modelo) mora aqui. Cada tela ganha espaço para o que a decisão exige:
+ * descrição, preço explicado e os anos escolares como alvos grandes. Uma
+ * grade densa economiza rolagem e cobra o preço em erro de leitura.
  */
 export function EtapaEscolha({
   ctx,
@@ -36,7 +34,10 @@ export function EtapaEscolha({
   aoSalvar: () => Promise<void>;
 }) {
   const linhas = useMemo(
-    () => calcularLinhas(ctx, sessao.regionalId ?? ''),
+    () =>
+      calcularLinhas(ctx, sessao.regionalId ?? '').filter(
+        (l) => l.produto.categoria !== CATEGORIA_AVALIACAO_LARGA_ESCALA,
+      ),
     [ctx, sessao.regionalId],
   );
 
@@ -56,27 +57,6 @@ export function EtapaEscolha({
   // Licenças ajustadas manualmente, ano a ano — ausente aqui segue a previsão.
   const [licencas, setLicencas] = useState<PrevisaoPorAno>({});
   const [ajustarLicencas, setAjustarLicencas] = useState(false);
-
-  // Modelos: pacotes fechados de avaliações que o gestor aplica de uma vez.
-  // Carrega só os publicados, uma vez — não muda durante a etapa.
-  const [modelos, setModelos] = useState<Modelo[]>([]);
-  const [modeloEscolhido, setModeloEscolhido] = useState<Modelo | null>(null);
-  const [aplicandoModelo, setAplicandoModelo] = useState(false);
-  const [erroModelo, setErroModelo] = useState<string | null>(null);
-  // Remover um modelo já aplicado — guarda só o essencial (id e nome, pra
-  // legenda do diálogo), não o Modelo inteiro: o modelo pode ter sido
-  // editado ou excluído do catálogo desde que foi aplicado.
-  const [modeloParaRemover, setModeloParaRemover] = useState<{ id: string; nome: string } | null>(
-    null,
-  );
-  const [removendoModelo, setRemovendoModelo] = useState(false);
-
-  useEffect(() => {
-    if (somenteLeitura) return;
-    listarModelosPublicados(ctx.ciclo.id)
-      .then(setModelos)
-      .catch(() => setModelos([]));
-  }, [ctx.ciclo.id, somenteLeitura]);
 
   const atual: LinhaCalculada | undefined = linhas[indice];
 
@@ -154,74 +134,6 @@ export function EtapaEscolha({
   const totais = useMemo(() => somarTotais(linhas), [linhas]);
   const decididas = linhas.filter((l) => l.decidida).length;
 
-  // O que o modelo escolhido significa PARA ESTA unidade agora — recalculado
-  // a cada troca de modelo ou de linha (ex.: previsão mudou entre telas).
-  const resolucaoModelo = useMemo(
-    () => (modeloEscolhido ? resolverItensDoModelo(modeloEscolhido, linhas, ctx) : null),
-    [modeloEscolhido, linhas, ctx],
-  );
-  // Alguma solução do modelo já tem decisão gravada — aplicar substitui, não
-  // soma, então isso muda o nível de confirmação exigido. `l.decidida` não
-  // serve aqui: uma obrigatória nasce "decidida" mesmo sem nenhum item
-  // gravado, e aplicar o modelo nela não sobrescreve escolha nenhuma.
-  const modeloSobrescreve = useMemo(() => {
-    if (!resolucaoModelo) return false;
-    const idsDoModelo = new Set(resolucaoModelo.itens.map((i) => i.produto.id));
-    return linhas.some((l) => idsDoModelo.has(l.produto.id) && !!l.item);
-  }, [resolucaoModelo, linhas]);
-
-  const aplicarModeloEscolhido = useCallback(async () => {
-    if (!modeloEscolhido || !resolucaoModelo) return;
-    if (resolucaoModelo.itens.length === 0) {
-      setModeloEscolhido(null);
-      return;
-    }
-    setAplicandoModelo(true);
-    setErroModelo(null);
-    try {
-      await escritor.aplicarModelo(ctx.ciclo, sessao, modeloEscolhido, resolucaoModelo.itens);
-      await aoSalvar();
-      setModeloEscolhido(null);
-    } catch {
-      setErroModelo('Não foi possível aplicar o modelo. Tente de novo.');
-    } finally {
-      setAplicandoModelo(false);
-    }
-  }, [modeloEscolhido, resolucaoModelo, escritor, ctx, sessao, aoSalvar]);
-
-  // Soluções atualmente marcadas por um modelo específico — é o que a
-  // remoção apaga. Calculado das linhas (não do Modelo em si) porque o
-  // modelo pode ter mudado de lista desde que foi aplicado.
-  const produtosDoModelo = useCallback(
-    (modeloId: string) =>
-      linhas.filter((l) => l.item?.origemModeloId === modeloId).map((l) => l.produto.id),
-    [linhas],
-  );
-
-  const removerModeloEscolhido = useCallback(async () => {
-    if (!modeloParaRemover || !ctx.pedido) return;
-    const produtoIds = produtosDoModelo(modeloParaRemover.id);
-    if (produtoIds.length === 0) {
-      setModeloParaRemover(null);
-      return;
-    }
-    setRemovendoModelo(true);
-    setErroModelo(null);
-    try {
-      await escritor.removerModelo(ctx.pedido.id, produtoIds);
-      await aoSalvar();
-      setModeloParaRemover(null);
-    } catch {
-      setErroModelo('Não foi possível remover o modelo. Tente de novo.');
-    } finally {
-      setRemovendoModelo(false);
-    }
-  }, [modeloParaRemover, ctx.pedido, produtosDoModelo, escritor, aoSalvar]);
-
-  // A solução atual veio de um modelo aplicado — pacote fechado, não dá pra
-  // ajustar peça por peça. Pra mudar, o gestor remove o modelo inteiro.
-  const travadaPorModelo = !!atual?.item?.origemModeloId;
-
   // Pra onde ir depois de gravar — índice de outra solução (clique na lista
   // lateral inclusive), a etapa seguinte (mapa) ou a etapa anterior
   // (previsão). null significa "só grava, sem navegar".
@@ -236,13 +148,8 @@ export function EtapaEscolha({
         else aoVoltar();
       };
 
-      // Sem nada pra gravar (etapa fechada, pedido já enviado, ou solução
-      // travada por um modelo) — só navega. Travada por modelo é o caso
-      // mais sutil: os campos aparecem desabilitados, mas se `gravar`
-      // regravasse mesmo assim, a escrita sem `origemModeloId` destravaria
-      // a solução sem o gestor pedir — silenciosamente soltando um item do
-      // pacote fechado.
-      if (!atual || somenteLeitura || travadaPorModelo) {
+      // Sem nada pra gravar (etapa fechada ou pedido já enviado) — só navega.
+      if (!atual || somenteLeitura) {
         navegar();
         return;
       }
@@ -287,7 +194,6 @@ export function EtapaEscolha({
       licencas,
       precisaEscolherCredito,
       somenteLeitura,
-      travadaPorModelo,
       aoSalvar,
       aoAvancar,
       aoVoltar,
@@ -320,60 +226,6 @@ export function EtapaEscolha({
 
   return (
     <div className="flex flex-col gap-5">
-      {!somenteLeitura && modelos.length > 0 && (
-        <Cartao className="gap-3 p-5">
-          <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-semibold text-brand">Aplicar um modelo de avaliação</h3>
-            <p className="max-w-prose text-sm text-gray-500">
-              Um modelo é um pacote fechado de avaliações — marca todas de uma vez, em todos os
-              anos habilitados, já puxando a previsão de alunos da sua unidade pra calcular o
-              valor. Depois de aplicado, o pacote fica travado: pra mudar qualquer coisa nele, é
-              preciso remover o modelo inteiro.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {modelos.map((m) => {
-              const aplicado = linhas.some((l) => l.item?.origemModeloId === m.id);
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  disabled={aplicandoModelo || removendoModelo}
-                  onClick={() =>
-                    aplicado ? setModeloParaRemover({ id: m.id, nome: m.nome }) : setModeloEscolhido(m)
-                  }
-                  className={juntar(
-                    'flex min-w-48 flex-col gap-1 rounded-xl border p-3.5 text-left transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50',
-                    aplicado
-                      ? 'border-brand-medium bg-brand-medium/5 hover:shadow-sm'
-                      : 'border-gray-200 bg-white hover:-translate-y-px hover:border-brand-medium hover:shadow-sm',
-                  )}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium text-gray-800">{m.nome}</span>
-                    {aplicado && <Selo tom="marca">aplicado</Selo>}
-                  </span>
-                  {m.descricao && (
-                    <span className="line-clamp-2 text-xs text-gray-500">{m.descricao}</span>
-                  )}
-                  <span className="mt-1 font-mono text-[11px] tracking-wide text-gray-400 uppercase">
-                    {aplicado
-                      ? 'toque pra remover'
-                      : `${m.itens.length} avaliaç${m.itens.length === 1 ? 'ão' : 'ões'}`}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </Cartao>
-      )}
-
-      {erroModelo && (
-        <p role="alert" className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800">
-          {erroModelo}
-        </p>
-      )}
-
       <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
       {/* Lista lateral: dá para pular para qualquer solução e ver o que falta */}
       <Cartao className="h-fit gap-1 p-3">
@@ -410,11 +262,6 @@ export function EtapaEscolha({
                 )}
               />
               <span className="min-w-0 flex-1 truncate">{l.produto.nome}</span>
-              {!!l.item?.origemModeloId && (
-                <span aria-hidden="true" title="Travada por um modelo" className="shrink-0 text-xs">
-                  🔒
-                </span>
-              )}
             </button>
           );
         })}
@@ -466,30 +313,8 @@ export function EtapaEscolha({
             </p>
           )}
 
-          {travadaPorModelo && !somenteLeitura && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
-              <span>
-                🔒 Aplicada pelo modelo <strong>{atual.item?.origemModeloNome}</strong> — pacote
-                fechado, os valores já vêm prontos do pacote.
-              </span>
-              <Botao
-                variante="secundario"
-                tamanho="sm"
-                onClick={() =>
-                  atual.item?.origemModeloId &&
-                  setModeloParaRemover({
-                    id: atual.item.origemModeloId,
-                    nome: atual.item.origemModeloNome ?? '',
-                  })
-                }
-              >
-                Remover modelo
-              </Botao>
-            </div>
-          )}
-
           <fieldset
-            disabled={somenteLeitura || recusado || travadaPorModelo}
+            disabled={somenteLeitura || recusado}
             className="flex flex-col gap-3 disabled:opacity-50"
           >
             <legend className="pb-1 text-sm font-medium text-gray-700">
@@ -610,7 +435,7 @@ export function EtapaEscolha({
                 </p>
               </div>
 
-              <fieldset disabled={somenteLeitura || travadaPorModelo} className="disabled:opacity-50">
+              <fieldset disabled={somenteLeitura} className="disabled:opacity-50">
                 <table className="w-full table-fixed border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 text-xs text-gray-500">
@@ -735,7 +560,7 @@ export function EtapaEscolha({
                     Por padrão a quantidade de licenças segue a previsão de alunos. Mude aqui só se
                     esta solução cobrir menos — ou mais — alunos do que o total matriculado no ano.
                   </p>
-                  <fieldset disabled={somenteLeitura || travadaPorModelo} className="flex flex-col gap-2">
+                  <fieldset disabled={somenteLeitura} className="flex flex-col gap-2">
                     {anosAtivos.map((ano) => {
                       const previsaoAno = ctx.previsao[ano] ?? 0;
                       const valor = licencas[ano] ?? previsaoAno;
@@ -793,7 +618,7 @@ export function EtapaEscolha({
             </p>
           )}
 
-          {!temObrigatorio && !somenteLeitura && !travadaPorModelo && (
+          {!temObrigatorio && !somenteLeitura && (
             <label className="flex items-center gap-2.5 rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-600">
               <input
                 type="checkbox"
@@ -856,92 +681,6 @@ export function EtapaEscolha({
         </Cartao>
       </div>
       </div>
-
-      <DialogoConfirmacao
-        aberto={!!modeloEscolhido}
-        nivel={modeloSobrescreve ? 'medio' : 'simples'}
-        titulo={`Aplicar "${modeloEscolhido?.nome ?? ''}"`}
-        descricao={
-          modeloSobrescreve
-            ? 'Algumas destas avaliações já têm decisão gravada — aplicar o modelo substitui a decisão atual delas.'
-            : 'Um pacote fechado: cada avaliação abaixo entra marcada em todos os anos habilitados, com o valor calculado sobre a previsão de alunos da sua unidade. Depois de aplicado, elas ficam travadas — pra ajustar qualquer uma, é preciso remover o modelo inteiro.'
-        }
-        detalhe={
-          resolucaoModelo && (
-            <div className="flex flex-col gap-2">
-              {resolucaoModelo.itens.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <span className="font-medium text-gray-700">
-                    {resolucaoModelo.itens.length === 1
-                      ? '1 avaliação será marcada:'
-                      : `${resolucaoModelo.itens.length} avaliações serão marcadas:`}
-                  </span>
-                  <ul className="flex flex-col gap-0.5">
-                    {resolucaoModelo.itens.map((i) => {
-                      const itemAtual = linhas.find((l) => l.produto.id === i.produto.id)?.item;
-                      return (
-                        <li key={i.produto.id}>
-                          {i.produto.nome}
-                          {!!itemAtual?.origemModeloId &&
-                            itemAtual.origemModeloId !== modeloEscolhido?.id && (
-                              <span className="text-amber-700">
-                                {' '}
-                                · substitui o modelo "{itemAtual.origemModeloNome}"
-                              </span>
-                            )}
-                          {!!itemAtual && !itemAtual.origemModeloId && (
-                            <span className="text-amber-700"> · substitui decisão manual atual</span>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-              {resolucaoModelo.indisponiveis.length > 0 && (
-                <div className="flex flex-col gap-1 text-xs text-gray-500">
-                  <span>Não disponíveis para a sua unidade, ficam de fora:</span>
-                  <span>{resolucaoModelo.indisponiveis.join(', ')}</span>
-                </div>
-              )}
-              {resolucaoModelo.itens.length === 0 && (
-                <span className="text-gray-500">
-                  Nenhuma avaliação deste modelo está disponível para a sua unidade.
-                </span>
-              )}
-            </div>
-          )
-        }
-        textoConfirmar="Aplicar modelo"
-        carregando={aplicandoModelo}
-        aoCancelar={() => setModeloEscolhido(null)}
-        aoConfirmar={() => void aplicarModeloEscolhido()}
-      />
-
-      <DialogoConfirmacao
-        aberto={!!modeloParaRemover}
-        nivel="medio"
-        titulo={`Remover "${modeloParaRemover?.nome ?? ''}"`}
-        descricao="As avaliações que vieram deste modelo voltam a ficar sem decisão — inclusive as obrigatórias, que só recalculam o valor quando você passar por elas de novo. Depois de remover, você pode decidir cada uma manualmente ou aplicar outro modelo."
-        detalhe={
-          modeloParaRemover && (
-            <div className="flex flex-col gap-1">
-              <span className="font-medium text-gray-700">Ficam sem decisão:</span>
-              <ul className="flex flex-col gap-0.5">
-                {produtosDoModelo(modeloParaRemover.id).map((produtoId) => (
-                  <li key={produtoId}>
-                    {linhas.find((l) => l.produto.id === produtoId)?.produto.nome ?? produtoId}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )
-        }
-        textoConfirmar="Remover modelo"
-        carregando={removendoModelo}
-        aoCancelar={() => setModeloParaRemover(null)}
-        aoConfirmar={() => void removerModeloEscolhido()}
-      />
     </div>
   );
 }

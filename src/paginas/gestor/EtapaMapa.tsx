@@ -1,22 +1,20 @@
 import { useMemo, useState } from 'react';
 import { DialogoConfirmacao } from '@/componentes/Modal';
-import { Botao, Cartao, Selo, juntar } from '@/componentes/ui';
+import { Botao, Cartao, EstadoVazio, Selo } from '@/componentes/ui';
 import type { Sessao } from '@/lib/auth';
 import { calcularLinhas, somarTotais } from '@/lib/pedido';
 import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
-import { SEGMENTOS, anosDoSegmento } from '@dominio/anosEscolares';
-import type { AnoEscolarId, SegmentoId } from '@dominio/anosEscolares';
-import { formatarBRL, formatarBRLcurto } from '@dominio/preco';
-import type { Centavos } from '@dominio/tipos';
+import { descreverAnos } from '@dominio/anosEscolares';
+import { formatarBRL } from '@dominio/preco';
+import { CATEGORIA_AVALIACAO_LARGA_ESCALA } from '@dominio/tipos';
 
 /**
- * Etapa 3 — o mapa da contratação.
+ * Etapa 4 — o mapa da contratação.
  *
- * Uma coluna por ano escolar, um card por solução. Fica grande, e tudo bem:
- * aqui não se decide, se confere. Um segmento aberto por vez, porque quatro
- * abertos são 17 colunas e a rolagem infinita de volta. Recolhido, a barra
- * ainda informa alunos, soluções e total — senão obriga a abrir tudo para
- * procurar.
+ * De propósito, limpo: o que está sendo contratado, em palavras, sem preço
+ * por linha nem grade de anos — quem quer mais detalhe volta e navega pelas
+ * etapas anteriores. O único número grande é o resumo do orçamento, no
+ * final.
  */
 export function EtapaMapa({
   ctx,
@@ -24,6 +22,7 @@ export function EtapaMapa({
   somenteLeitura,
   escritor,
   aoVoltar,
+  aoIrParaModelo,
   aoSalvar,
 }: {
   ctx: ContextoPedido;
@@ -31,6 +30,7 @@ export function EtapaMapa({
   somenteLeitura: boolean;
   escritor: EscritorPedido;
   aoVoltar: () => void;
+  aoIrParaModelo: () => void;
   aoSalvar: () => Promise<void>;
 }) {
   const linhas = useMemo(
@@ -39,42 +39,33 @@ export function EtapaMapa({
   );
   const totais = useMemo(() => somarTotais(linhas), [linhas]);
 
-  const [aberto, setAberto] = useState<SegmentoId | null>('anos_iniciais');
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const contratadas = linhas.filter((l) => (l.item?.anosSelecionados.length ?? 0) > 0);
-  const porUnidade = contratadas.filter((l) => l.habilitacao.preco.base === 'escola');
-  const porAluno = contratadas.filter((l) => l.habilitacao.preco.base !== 'escola');
   const pendentes = linhas.filter((l) => !l.decidida);
+  const pendentesModelo = pendentes.filter(
+    (l) => l.produto.categoria === CATEGORIA_AVALIACAO_LARGA_ESCALA,
+  );
+  const pendentesEscolha = pendentes.filter(
+    (l) => l.produto.categoria !== CATEGORIA_AVALIACAO_LARGA_ESCALA,
+  );
 
-  /**
-   * Rateia o valor de uma solução no ano escolar, para a coluna. Por
-   * crédito, o preço é por crédito, não por aluno — e a quantidade digitada
-   * já é o total daquele ano, não um multiplicador sobre os alunos.
-   */
-  function valorNoAno(l: LinhaCalculada, ano: AnoEscolarId): Centavos {
-    const preco = l.habilitacao.preco;
-    const quantidade =
-      preco.base === 'credito' ? (l.item?.creditosPorAno?.[ano] ?? 0) : (l.item?.alunosPorAno[ano] ?? 0);
-    if (quantidade === 0) return 0;
-    const vezes = preco.ciclo === 'mensal' ? preco.meses : 1;
-    return preco.valor * quantidade * vezes;
-  }
+  // Agrupa o que veio de modelo pelo modelo de origem — é o pacote que a
+  // unidade adotou, não soluções soltas.
+  const porModelo = useMemo(() => {
+    const grupos = new Map<string, { nome: string; linhas: LinhaCalculada[] }>();
+    for (const l of contratadas) {
+      const id = l.item?.origemModeloId;
+      if (!id) continue;
+      if (!grupos.has(id)) grupos.set(id, { nome: l.item?.origemModeloNome ?? 'Modelo', linhas: [] });
+      grupos.get(id)!.linhas.push(l);
+    }
+    return [...grupos.values()];
+  }, [contratadas]);
 
-  function resumoSegmento(seg: SegmentoId) {
-    const anos = anosDoSegmento(seg).filter((a) => (ctx.previsao[a.id] ?? 0) > 0);
-    const alunos = anos.reduce((s, a) => s + (ctx.previsao[a.id] ?? 0), 0);
-    const solucoes = porAluno.filter((l) =>
-      anos.some((a) => (l.item?.alunosPorAno[a.id] ?? 0) > 0),
-    );
-    const total = solucoes.reduce(
-      (s, l) => s + anos.reduce((t, a) => t + valorNoAno(l, a.id), 0),
-      0,
-    );
-    return { anos, alunos, solucoes: solucoes.length, total };
-  }
+  const adicionais = contratadas.filter((l) => !l.item?.origemModeloId);
 
   async function enviar() {
     setEnviando(true);
@@ -103,131 +94,85 @@ export function EtapaMapa({
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-brand">Mapa da contratação {ctx.ciclo.anoAlvo}</h2>
         <p className="max-w-prose text-sm text-gray-500">
-          A decisão inteira de uma vez. É aqui que se percebe o que ficou estranho — um ano sem
-          nada, ou um com o dobro do vizinho.
+          O que está sendo contratado. Pra ver preço e anos escolares linha a linha, volte às
+          etapas anteriores — aqui é só a conferência final, antes do envio.
         </p>
       </div>
 
-      {porUnidade.length > 0 && (
-        <Cartao className="gap-2 border-l-3 border-l-brand-light p-4">
-          <span className="font-mono text-[11px] tracking-wider text-brand uppercase">
-            Unidade inteira
-          </span>
-          {porUnidade.map((l) => (
-            <div key={l.produto.id} className="flex flex-wrap items-baseline gap-2">
-              <span className="text-sm font-medium">{l.produto.nome}</span>
-              <span className="text-xs text-gray-500">
-                {ctx.fornecedores.get(l.produto.fornecedorId)} — licença por escola, não varia com o
-                ano escolar
+      {contratadas.length === 0 ? (
+        <EstadoVazio
+          icone={<span aria-hidden="true">📭</span>}
+          titulo="Nada contratado ainda"
+          descricao="Volte às etapas anteriores para adotar um modelo ou escolher soluções adicionais."
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {porModelo.map((grupo) => (
+            <Cartao key={grupo.nome} className="gap-2 p-5">
+              <span className="font-mono text-[11px] tracking-wider text-gray-500 uppercase">
+                Modelo adotado
               </span>
-              <div className="flex-1" />
-              <span className="font-mono text-sm tabular-nums">{formatarBRL(l.valorAnual)}</span>
-            </div>
+              <h3 className="text-base font-semibold text-brand">{grupo.nome}</h3>
+              <ul className="flex flex-col gap-1.5">
+                {grupo.linhas.map((l) => (
+                  <li
+                    key={l.produto.id}
+                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
+                  >
+                    <span className="text-gray-700">{l.produto.nome}</span>
+                    <span className="text-xs text-gray-500">
+                      {descreverAnos(l.item?.anosSelecionados ?? [])}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Cartao>
           ))}
-        </Cartao>
+
+          {adicionais.length > 0 && (
+            <Cartao className="gap-2 p-5">
+              <span className="font-mono text-[11px] tracking-wider text-gray-500 uppercase">
+                Soluções adicionais
+              </span>
+              <ul className="flex flex-col gap-1.5">
+                {adicionais.map((l) => (
+                  <li
+                    key={l.produto.id}
+                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
+                  >
+                    <span className="flex flex-wrap items-center gap-1.5 text-gray-700">
+                      {l.produto.nome}
+                      {l.habilitacao.obrigatorios.length > 0 && <Selo tom="marca">obrigatória</Selo>}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {l.habilitacao.preco.base === 'escola'
+                        ? 'toda a unidade'
+                        : descreverAnos(l.item?.anosSelecionados ?? [])}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Cartao>
+          )}
+        </div>
       )}
 
-      <Cartao className="overflow-hidden p-0">
-        {SEGMENTOS.map((seg) => {
-          const { anos, alunos, solucoes, total } = resumoSegmento(seg.id);
-          if (anos.length === 0) return null;
-          const expandido = aberto === seg.id;
-
-          return (
-            <div key={seg.id} className="flex flex-col gap-3 border-b border-gray-200 p-4 last:border-b-0">
-              <button
-                type="button"
-                onClick={() => setAberto(expandido ? null : seg.id)}
-                aria-expanded={expandido}
-                className="flex flex-wrap items-center gap-3 text-left"
-              >
-                <span aria-hidden="true" className="w-3 text-xs text-gray-400">
-                  {expandido ? '▾' : '▸'}
-                </span>
-                <span className="text-sm font-semibold text-brand">{seg.nome}</span>
-                <span className="font-mono text-xs text-gray-500">
-                  {anos.length} ano{anos.length === 1 ? '' : 's'} · {alunos} alunos · {solucoes}{' '}
-                  soluç{solucoes === 1 ? 'ão' : 'ões'}
-                </span>
-                <div className="flex-1" />
-                <span className="font-mono text-sm font-medium tabular-nums">
-                  {formatarBRL(total)}
-                </span>
-              </button>
-
-              {expandido && (
-                <div
-                  className="grid auto-cols-[196px] grid-flow-col gap-3 overflow-x-auto pb-2"
-                  role="group"
-                  aria-label={`Colunas de ${seg.nome}`}
-                >
-                  {anos.map((ano) => {
-                    const doAno = porAluno.filter(
-                      (l) => (l.item?.alunosPorAno[ano.id] ?? 0) > 0,
-                    );
-                    const totalAno = doAno.reduce((s, l) => s + valorNoAno(l, ano.id), 0);
-                    return (
-                      <div key={ano.id} className="flex flex-col gap-2">
-                        <div className="flex flex-col rounded-lg bg-gray-100 px-3 py-2">
-                          <span className="text-sm font-semibold">{ano.nome}</span>
-                          <span className="font-mono text-[11px] text-gray-500">
-                            {ctx.previsao[ano.id]} alunos
-                          </span>
-                        </div>
-
-                        {doAno.length === 0 ? (
-                          <div className="rounded-lg border border-dashed border-gray-300 p-3 text-xs text-gray-500">
-                            Nenhuma solução contratada para este ano.
-                          </div>
-                        ) : (
-                          doAno.map((l) => {
-                            const obrigatoria = l.habilitacao.obrigatorios.includes(ano.id);
-                            return (
-                              <div
-                                key={l.produto.id}
-                                className={juntar(
-                                  'flex flex-col gap-0.5 rounded-lg border border-gray-200 border-l-3 bg-white p-3',
-                                  obrigatoria ? 'border-l-orange-400' : 'border-l-brand-medium',
-                                )}
-                              >
-                                <span className="text-xs leading-snug font-medium">
-                                  {l.produto.nome}
-                                </span>
-                                <span className="text-[11px] text-gray-500">
-                                  {ctx.fornecedores.get(l.produto.fornecedorId)}
-                                  {obrigatoria && ' · obrigatória'}
-                                </span>
-                                <span className="font-mono text-[11px] text-gray-500 tabular-nums">
-                                  {formatarBRL(valorNoAno(l, ano.id))}
-                                </span>
-                              </div>
-                            );
-                          })
-                        )}
-
-                        <div className="flex items-baseline justify-between border-t-2 border-gray-300 px-1 pt-2">
-                          <span className="font-mono text-[10px] tracking-wider text-gray-500 uppercase">
-                            total
-                          </span>
-                          <span className="font-mono text-xs font-medium tabular-nums">
-                            {formatarBRLcurto(totalAno)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </Cartao>
-
-      {pendentes.length > 0 && !somenteLeitura && (
+      {pendentesModelo.length > 0 && !somenteLeitura && (
         <p className="rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-800">
-          Faltam decisões em: {pendentes.map((l) => l.produto.nome).join(', ')}. Volte à escolha e
-          marque os anos ou diga que não vai contratar — caixa vazia não diz se você recusou ou se
-          ainda não olhou.
+          Falta decidir: {pendentesModelo.map((l) => l.produto.nome).join(', ')}. Adote um modelo
+          que cubra essas avaliações —{' '}
+          <button type="button" onClick={aoIrParaModelo} className="underline">
+            ir para o modelo
+          </button>
+          .
+        </p>
+      )}
+
+      {pendentesEscolha.length > 0 && !somenteLeitura && (
+        <p className="rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-800">
+          Faltam decisões em: {pendentesEscolha.map((l) => l.produto.nome).join(', ')}. Volte às
+          soluções adicionais e marque os anos ou diga que não vai contratar — caixa vazia não diz
+          se você recusou ou se ainda não olhou.
         </p>
       )}
 
@@ -238,18 +183,6 @@ export function EtapaMapa({
       )}
 
       <Cartao className="flex-row flex-wrap items-center gap-5 p-4">
-        <div className="flex flex-col">
-          <span className="text-xs tracking-wide text-gray-500 uppercase">Obrigatórias</span>
-          <span className="font-mono text-sm font-medium tabular-nums">
-            {formatarBRL(totais.obrigatorio)}
-          </span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-xs tracking-wide text-gray-500 uppercase">Opcionais</span>
-          <span className="font-mono text-sm font-medium tabular-nums">
-            {formatarBRL(totais.opcional)}
-          </span>
-        </div>
         <div className="flex flex-col">
           <span className="text-xs tracking-wide text-gray-500 uppercase">
             Total estimado {ctx.ciclo.anoAlvo}
@@ -266,7 +199,7 @@ export function EtapaMapa({
         ) : (
           <>
             <Botao variante="secundario" onClick={aoVoltar}>
-              Voltar à escolha
+              Voltar às soluções adicionais
             </Botao>
             <Botao
               onClick={() => setConfirmando(true)}

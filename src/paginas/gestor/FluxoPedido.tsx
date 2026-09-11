@@ -7,6 +7,7 @@ import { carregarContexto, escritorPedidoReal } from '@/lib/pedido';
 import type { ContextoPedido } from '@/lib/pedido';
 import { criarEscritorSimulado } from '@/lib/pedidoSimulado';
 import { EtapaPrevisao } from './EtapaPrevisao';
+import { EtapaModelo } from './EtapaModelo';
 import { EtapaEscolha } from './EtapaEscolha';
 import { EtapaMapa } from './EtapaMapa';
 
@@ -15,16 +16,17 @@ import { EtapaMapa } from './EtapaMapa';
  * comportamento normal aqui, não a exceção — ninguém decide o orçamento do
  * ano em uma sessão de dez minutos.
  */
-export type Etapa = 'previsao' | 'escolha' | 'mapa';
+export type Etapa = 'previsao' | 'modelo' | 'escolha' | 'mapa';
 
 const ETAPAS: { id: Etapa; rotulo: string; numero: number }[] = [
   { id: 'previsao', rotulo: 'Previsão de alunos', numero: 1 },
-  { id: 'escolha', rotulo: 'Escolha das soluções', numero: 2 },
-  { id: 'mapa', rotulo: 'Mapa e envio', numero: 3 },
+  { id: 'modelo', rotulo: 'Modelo de avaliação', numero: 2 },
+  { id: 'escolha', rotulo: 'Soluções adicionais', numero: 3 },
+  { id: 'mapa', rotulo: 'Mapa e envio', numero: 4 },
 ];
 
 function ehEtapa(v: string | null): v is Etapa {
-  return v === 'previsao' || v === 'escolha' || v === 'mapa';
+  return v === 'previsao' || v === 'modelo' || v === 'escolha' || v === 'mapa';
 }
 
 /**
@@ -171,6 +173,17 @@ export function FluxoPedido({
           sessao={sessao}
           somenteLeitura={somenteLeitura}
           escritor={escritor}
+          aoAvancar={() => irPara('modelo')}
+          aoSalvar={aoSalvar}
+        />
+      )}
+      {etapa === 'modelo' && (
+        <EtapaModelo
+          ctx={ctx}
+          sessao={sessao}
+          somenteLeitura={somenteLeitura}
+          escritor={escritor}
+          aoVoltar={() => irPara('previsao')}
           aoAvancar={() => irPara('escolha')}
           aoSalvar={aoSalvar}
         />
@@ -181,7 +194,7 @@ export function FluxoPedido({
           sessao={sessao}
           somenteLeitura={somenteLeitura}
           escritor={escritor}
-          aoVoltar={() => irPara('previsao')}
+          aoVoltar={() => irPara('modelo')}
           aoAvancar={() => irPara('mapa')}
           aoSalvar={aoSalvar}
         />
@@ -193,6 +206,7 @@ export function FluxoPedido({
           somenteLeitura={somenteLeitura}
           escritor={escritor}
           aoVoltar={() => irPara('escolha')}
+          aoIrParaModelo={() => irPara('modelo')}
           aoSalvar={aoSalvar}
         />
       )}

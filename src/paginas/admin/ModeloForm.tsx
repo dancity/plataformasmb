@@ -9,6 +9,7 @@ import {
   obterModelo,
 } from '@/lib/dados';
 import type { Fornecedor, ItemModelo, Produto, Visibilidade } from '@dominio/tipos';
+import { CATEGORIA_AVALIACAO_LARGA_ESCALA } from '@dominio/tipos';
 import { descreverPreco } from '@dominio/preco';
 import { ANOS_ESCOLARES, SEGMENTOS, anosDoSegmento, ordenarAnos } from '@dominio/anosEscolares';
 import type { AnoEscolarId } from '@dominio/anosEscolares';
@@ -17,9 +18,11 @@ import { useAdmin } from './LayoutAdmin';
 /**
  * Cadastro de modelo, em página cheia — mesma razão da página de solução:
  * a lista de avaliações pode ser longa, e não cabe bem numa caixa de altura
- * fixa. Nada aqui restringe a categoria das soluções escolhidas, mas na
- * prática modelo só existe pra avaliação — é por isso que os textos falam
- * em "avaliações" em vez de "soluções" em geral.
+ * fixa. O seletor só oferece soluções da categoria "Avaliação em larga
+ * escala" — é a mesma categoria que a etapa de soluções adicionais do
+ * gestor esconde, porque uma solução dela só entra no pedido através de um
+ * modelo. É por isso que os textos falam em "avaliações" em vez de
+ * "soluções" em geral.
  *
  * Cada avaliação do pacote carrega seus próprios anos escolares — não é
  * herdado da habilitação de nenhuma regional (o modelo é do ciclo, não de
@@ -102,25 +105,21 @@ export function ModeloForm() {
   // reaproveitada tanto pra listar "anos por avaliação" quanto pra salvar.
   const ordemCatalogo = useMemo(() => new Map(produtos.map((p, i) => [p.id, i])), [produtos]);
 
+  // Só a categoria reservada — é a mesma coisa que faz uma solução dela
+  // nunca aparecer na etapa de soluções adicionais do gestor.
+  const produtosDaCategoria = useMemo(
+    () => produtos.filter((p) => p.categoria === CATEGORIA_AVALIACAO_LARGA_ESCALA),
+    [produtos],
+  );
+
   const produtosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    if (!termo) return produtos;
-    return produtos.filter(
-      (p) =>
-        p.nome.toLowerCase().includes(termo) ||
-        p.categoria.toLowerCase().includes(termo) ||
-        nomeFornecedor(p.fornecedorId).toLowerCase().includes(termo),
+    if (!termo) return produtosDaCategoria;
+    return produtosDaCategoria.filter(
+      (p) => p.nome.toLowerCase().includes(termo) || nomeFornecedor(p.fornecedorId).toLowerCase().includes(termo),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [produtos, busca, fornecedores]);
-
-  const porCategoria = useMemo(() => {
-    const grupos = new Map<string, Produto[]>();
-    for (const p of produtosFiltrados) {
-      (grupos.get(p.categoria) ?? grupos.set(p.categoria, []).get(p.categoria)!).push(p);
-    }
-    return [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b, 'pt-BR'));
-  }, [produtosFiltrados]);
+  }, [produtosDaCategoria, busca, fornecedores]);
 
   // Os itens já escolhidos, na ordem do catálogo — é nessa ordem que a
   // seção "anos por avaliação" lista pra ficar previsível de achar.
@@ -319,44 +318,40 @@ export function ModeloForm() {
         <Entrada
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por nome, categoria ou fornecedor…"
+          placeholder="Buscar por nome ou fornecedor…"
         />
 
-        <div className="flex max-h-[24rem] flex-col gap-4 overflow-y-auto pr-1">
-          {porCategoria.length === 0 ? (
+        <div className="flex max-h-[24rem] flex-col gap-1 overflow-y-auto pr-1">
+          {produtosDaCategoria.length === 0 ? (
+            <p className="py-4 text-center text-sm text-gray-500">
+              Nenhuma solução da categoria "{CATEGORIA_AVALIACAO_LARGA_ESCALA}" cadastrada ainda —
+              é ela que aparece aqui. Cadastre uma em Soluções antes de montar o pacote.
+            </p>
+          ) : produtosFiltrados.length === 0 ? (
             <p className="py-4 text-center text-sm text-gray-500">Nenhuma solução encontrada.</p>
           ) : (
-            porCategoria.map(([categoria, itens]) => (
-              <div key={categoria} className="flex flex-col gap-1.5">
-                <span className="font-mono text-[11px] tracking-wider text-gray-500 uppercase">
-                  {categoria}
-                </span>
-                <div className="flex flex-col gap-1">
-                  {itens.map((p) => {
-                    const marcado = selecionados.has(p.id);
-                    return (
-                      <label
-                        key={p.id}
-                        className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-1.5 hover:bg-gray-50"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={marcado}
-                          onChange={() => alternarProduto(p.id)}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand-medium)]"
-                        />
-                        <span className="flex flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                          <span className="text-sm text-gray-800">{p.nome}</span>
-                          <span className="font-mono text-xs text-gray-500">
-                            {nomeFornecedor(p.fornecedorId)} · {descreverPreco(p.precificacao)}
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            ))
+            produtosFiltrados.map((p) => {
+              const marcado = selecionados.has(p.id);
+              return (
+                <label
+                  key={p.id}
+                  className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-1.5 hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={marcado}
+                    onChange={() => alternarProduto(p.id)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-brand-medium)]"
+                  />
+                  <span className="flex flex-1 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <span className="text-sm text-gray-800">{p.nome}</span>
+                    <span className="font-mono text-xs text-gray-500">
+                      {nomeFornecedor(p.fornecedorId)} · {descreverPreco(p.precificacao)}
+                    </span>
+                  </span>
+                </label>
+              );
+            })
           )}
         </div>
       </fieldset>

@@ -23,6 +23,7 @@ import type {
   Visibilidade,
 } from '@dominio/tipos';
 import { descreverPreco, reaisParaCentavos } from '@dominio/preco';
+import { CATEGORIA_AVALIACAO_LARGA_ESCALA } from '@dominio/tipos';
 import { useAdmin } from './LayoutAdmin';
 
 /**
@@ -35,6 +36,7 @@ import { useAdmin } from './LayoutAdmin';
 
 const CATEGORIAS = [
   'Avaliação',
+  CATEGORIA_AVALIACAO_LARGA_ESCALA,
   'Simulados',
   'Robótica e tecnologia',
   'Socioemocional',
@@ -438,7 +440,14 @@ export function SolucaoForm() {
           </Selecao>
         </Campo>
 
-        <Campo rotulo="Categoria" dica="Agrupa o catálogo e alerta sobre soluções sobrepostas.">
+        <Campo
+          rotulo="Categoria"
+          dica={
+            rascunho.categoria === CATEGORIA_AVALIACAO_LARGA_ESCALA
+              ? 'Reservada: uma solução aqui só entra no pedido através de um modelo — o gestor não escolhe ela isolada na etapa de soluções adicionais.'
+              : 'Agrupa o catálogo e alerta sobre soluções sobrepostas.'
+          }
+        >
           <Selecao
             value={rascunho.categoria}
             onChange={(e) => setRascunho({ ...rascunho, categoria: e.target.value })}

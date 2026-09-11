@@ -114,6 +114,14 @@ export interface Ciclo {
 
 // ─── Catálogo ────────────────────────────────────────────────────
 
+/**
+ * Categoria reservada: um produto cadastrado com esta categoria só entra
+ * num pedido através de um modelo — nunca escolhido solução por solução na
+ * etapa de soluções adicionais. É o que separa as duas etapas do fluxo do
+ * gestor (modelo de avaliação em larga escala × soluções adicionais).
+ */
+export const CATEGORIA_AVALIACAO_LARGA_ESCALA = 'Avaliação em larga escala';
+
 export type BasePreco = 'aluno' | 'escola' | 'turma' | 'credito';
 export type CicloCobranca = 'mensal' | 'anual';
 
