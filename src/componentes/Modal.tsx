@@ -26,7 +26,7 @@ export function Modal({
   descricao?: string;
   children?: ReactNode;
   rodape?: ReactNode;
-  largura?: 'sm' | 'md' | 'lg';
+  largura?: 'sm' | 'md' | 'lg' | 'xl';
 }) {
   const idTitulo = useId();
   const caixa = useRef<HTMLDivElement>(null);
@@ -55,7 +55,7 @@ export function Modal({
 
   if (!aberto) return null;
 
-  const LARGURA = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl' } as const;
+  const LARGURA = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' } as const;
 
   return createPortal(
     <div
@@ -71,19 +71,25 @@ export function Modal({
         aria-labelledby={idTitulo}
         tabIndex={-1}
         className={juntar(
-          'w-full rounded-2xl bg-white shadow-2xl focus:outline-none',
+          // flex-col + min-h-0 no filho de baixo é o que permite a caixa
+          // inteira caber na tela e só o miolo rolar — sem isso, em tela
+          // baixa (celular deitado, zoom grande) o rodapé com os botões
+          // fica cortado, fora do viewport, sem jeito de alcançar.
+          'flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-2xl bg-white shadow-2xl focus:outline-none',
           LARGURA[largura],
         )}
       >
-        <div className="flex flex-col gap-1.5 border-b border-gray-200 p-6 pb-4">
+        <div className="flex shrink-0 flex-col gap-1.5 border-b border-gray-200 p-6 pb-4">
           <h2 id={idTitulo} className="text-lg font-semibold text-brand">
             {titulo}
           </h2>
           {descricao && <p className="text-sm text-gray-500">{descricao}</p>}
         </div>
-        {children && <div className="flex flex-col gap-4 p-6">{children}</div>}
+        {children && (
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6">{children}</div>
+        )}
         {rodape && (
-          <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 p-4">
+          <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 p-4">
             {rodape}
           </div>
         )}

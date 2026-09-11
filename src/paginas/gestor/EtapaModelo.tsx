@@ -268,7 +268,7 @@ export function EtapaModelo({
         aoFechar={() => setModeloVisualizando(null)}
         titulo={modeloVisualizando?.nome ?? ''}
         descricao={modeloVisualizando?.descricao || 'Em quais anos escolares cada avaliação entra, para a sua regional.'}
-        largura="lg"
+        largura="xl"
         rodape={
           <>
             <Botao variante="secundario" onClick={() => setModeloVisualizando(null)}>
@@ -312,7 +312,7 @@ export function EtapaModelo({
         detalhe={
           <div className="flex flex-col gap-2">
             {previaItens.length > 0 ? (
-              <>
+              <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500">
@@ -349,7 +349,7 @@ export function EtapaModelo({
                     </tr>
                   </tfoot>
                 </table>
-              </>
+              </div>
             ) : (
               <span className="text-gray-500">
                 Nenhuma avaliação deste modelo está disponível para a sua unidade.
