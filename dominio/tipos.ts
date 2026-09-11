@@ -122,6 +122,14 @@ export interface Ciclo {
  */
 export const CATEGORIA_AVALIACAO_LARGA_ESCALA = 'Avaliação em larga escala';
 
+/**
+ * Categoria reservada: o que se compra aqui é redação corrigida, e crédito é
+ * o nome contábil disso. A tela de decisão fala a língua do produto —
+ * "quantas redações por aluno", não "quantos créditos" — porque é assim que
+ * o coordenador pensa na hora de escolher.
+ */
+export const CATEGORIA_REDACAO = 'Redação';
+
 export type BasePreco = 'aluno' | 'escola' | 'turma' | 'credito';
 export type CicloCobranca = 'mensal' | 'anual';
 

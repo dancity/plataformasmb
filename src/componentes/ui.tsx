@@ -1,4 +1,5 @@
 import type {
+  AnchorHTMLAttributes,
   ButtonHTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
@@ -36,6 +37,9 @@ const TAMANHO_BOTAO: Record<TamanhoBotao, string> = {
   icone: 'p-2',
 };
 
+const BASE_BOTAO =
+  'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors';
+
 interface PropsBotao extends ButtonHTMLAttributes<HTMLButtonElement> {
   variante?: VarianteBotao;
   tamanho?: TamanhoBotao;
@@ -56,7 +60,7 @@ export function Botao({
       {...resto}
       disabled={disabled || carregando}
       className={juntar(
-        'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors',
+        BASE_BOTAO,
         'disabled:cursor-not-allowed disabled:opacity-50',
         ESTILO_BOTAO[variante],
         TAMANHO_BOTAO[tamanho],
@@ -71,6 +75,31 @@ export function Botao({
       )}
       {children}
     </button>
+  );
+}
+
+/**
+ * Mesmo desenho do Botão, mas é link de verdade: abre em aba nova, aparece no
+ * menu de contexto, dá para copiar o endereço. Navegar é trabalho de link —
+ * `<button onClick={window.open}>` só imita um sem entregar nada disso.
+ */
+export function BotaoLink({
+  variante = 'secundario',
+  tamanho = 'md',
+  className,
+  children,
+  ...resto
+}: AnchorHTMLAttributes<HTMLAnchorElement> & {
+  variante?: VarianteBotao;
+  tamanho?: TamanhoBotao;
+}) {
+  return (
+    <a
+      {...resto}
+      className={juntar(BASE_BOTAO, ESTILO_BOTAO[variante], TAMANHO_BOTAO[tamanho], className)}
+    >
+      {children}
+    </a>
   );
 }
 

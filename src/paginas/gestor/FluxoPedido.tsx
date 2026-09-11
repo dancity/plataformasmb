@@ -206,7 +206,6 @@ export function FluxoPedido({
           somenteLeitura={somenteLeitura}
           escritor={escritor}
           aoVoltar={() => irPara('escolha')}
-          aoIrParaModelo={() => irPara('modelo')}
           aoSalvar={aoSalvar}
         />
       )}

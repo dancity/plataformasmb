@@ -23,7 +23,7 @@ import type {
   Visibilidade,
 } from '@dominio/tipos';
 import { descreverPreco, reaisParaCentavos } from '@dominio/preco';
-import { CATEGORIA_AVALIACAO_LARGA_ESCALA } from '@dominio/tipos';
+import { CATEGORIA_AVALIACAO_LARGA_ESCALA, CATEGORIA_REDACAO } from '@dominio/tipos';
 import { useAdmin } from './LayoutAdmin';
 
 /**
@@ -37,6 +37,7 @@ import { useAdmin } from './LayoutAdmin';
 const CATEGORIAS = [
   'Avaliação',
   CATEGORIA_AVALIACAO_LARGA_ESCALA,
+  CATEGORIA_REDACAO,
   'Simulados',
   'Robótica e tecnologia',
   'Socioemocional',
@@ -445,7 +446,9 @@ export function SolucaoForm() {
           dica={
             rascunho.categoria === CATEGORIA_AVALIACAO_LARGA_ESCALA
               ? 'Reservada: uma solução aqui só entra no pedido através de um modelo — o gestor não escolhe ela isolada na etapa de soluções adicionais.'
-              : 'Agrupa o catálogo e alerta sobre soluções sobrepostas.'
+              : rascunho.categoria === CATEGORIA_REDACAO
+                ? 'Reservada: cobrada por crédito, a tela do gestor fala em redações corrigidas por aluno em vez de créditos.'
+                : 'Agrupa o catálogo e alerta sobre soluções sobrepostas.'
           }
         >
           <Selecao

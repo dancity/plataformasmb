@@ -3,17 +3,23 @@ import { DialogoConfirmacao } from '@/componentes/Modal';
 import { Botao, Cartao, EstadoVazio, Selo } from '@/componentes/ui';
 import type { Sessao } from '@/lib/auth';
 import { calcularLinhas, somarTotais } from '@/lib/pedido';
-import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
-import { descreverAnos } from '@dominio/anosEscolares';
+import type { ContextoPedido, EscritorPedido } from '@/lib/pedido';
 import { formatarBRL } from '@dominio/preco';
 import { CATEGORIA_AVALIACAO_LARGA_ESCALA } from '@dominio/tipos';
+import {
+  AlternadorVisao,
+  LegendaOrigem,
+  VisaoCards,
+  VisaoLista,
+  montarContratadas,
+} from './VisoesContratacao';
+import type { Visao } from './VisoesContratacao';
 
 /**
  * Etapa 4 — o mapa da contratação.
  *
- * De propósito, limpo: o que está sendo contratado, em palavras, sem preço
- * por linha nem grade de anos — quem quer mais detalhe volta e navega pelas
- * etapas anteriores. O único número grande é o resumo do orçamento, no
+ * Duas leituras do mesmo pedido: por ano escolar, pra quem coordena o ano
+ * letivo, e em lista, pra quem assina. O único número grande é o total, no
  * final.
  */
 export function EtapaMapa({
@@ -22,7 +28,6 @@ export function EtapaMapa({
   somenteLeitura,
   escritor,
   aoVoltar,
-  aoIrParaModelo,
   aoSalvar,
 }: {
   ctx: ContextoPedido;
@@ -30,7 +35,6 @@ export function EtapaMapa({
   somenteLeitura: boolean;
   escritor: EscritorPedido;
   aoVoltar: () => void;
-  aoIrParaModelo: () => void;
   aoSalvar: () => Promise<void>;
 }) {
   const linhas = useMemo(
@@ -42,30 +46,21 @@ export function EtapaMapa({
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [visao, setVisao] = useState<Visao>('cards');
 
-  const contratadas = linhas.filter((l) => (l.item?.anosSelecionados.length ?? 0) > 0);
-  const pendentes = linhas.filter((l) => !l.decidida);
-  const pendentesModelo = pendentes.filter(
-    (l) => l.produto.categoria === CATEGORIA_AVALIACAO_LARGA_ESCALA,
-  );
-  const pendentesEscolha = pendentes.filter(
-    (l) => l.produto.categoria !== CATEGORIA_AVALIACAO_LARGA_ESCALA,
+  const contratadas = useMemo(() => montarContratadas(linhas), [linhas]);
+  const modelosAdotados = useMemo(
+    () => [...new Set(contratadas.map((c) => c.modelo).filter((m): m is string => !!m))],
+    [contratadas],
   );
 
-  // Agrupa o que veio de modelo pelo modelo de origem — é o pacote que a
-  // unidade adotou, não soluções soltas.
-  const porModelo = useMemo(() => {
-    const grupos = new Map<string, { nome: string; linhas: LinhaCalculada[] }>();
-    for (const l of contratadas) {
-      const id = l.item?.origemModeloId;
-      if (!id) continue;
-      if (!grupos.has(id)) grupos.set(id, { nome: l.item?.origemModeloNome ?? 'Modelo', linhas: [] });
-      grupos.get(id)!.linhas.push(l);
-    }
-    return [...grupos.values()];
-  }, [contratadas]);
-
-  const adicionais = contratadas.filter((l) => !l.item?.origemModeloId);
+  // Avaliação em larga escala só entra por modelo, nunca uma a uma. Se um
+  // modelo não cobre alguma, não há decisão a cobrar da unidade: adotar o
+  // modelo já é a decisão inteira. Por isso a categoria fica fora das
+  // pendências — nem aviso, nem trava no envio.
+  const pendentes = linhas.filter(
+    (l) => !l.decidida && l.produto.categoria !== CATEGORIA_AVALIACAO_LARGA_ESCALA,
+  );
 
   async function enviar() {
     setEnviando(true);
@@ -94,8 +89,8 @@ export function EtapaMapa({
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-brand">Mapa da contratação {ctx.ciclo.anoAlvo}</h2>
         <p className="max-w-prose text-sm text-gray-500">
-          O que está sendo contratado. Pra ver preço e anos escolares linha a linha, volte às
-          etapas anteriores — aqui é só a conferência final, antes do envio.
+          A conferência final antes do envio. Veja por ano escolar o que cada série recebe, ou em
+          lista o que foi contratado e quanto custa.
         </p>
       </div>
 
@@ -107,72 +102,24 @@ export function EtapaMapa({
         />
       ) : (
         <div className="flex flex-col gap-3">
-          {porModelo.map((grupo) => (
-            <Cartao key={grupo.nome} className="gap-2 p-5">
-              <span className="font-mono text-[11px] tracking-wider text-gray-500 uppercase">
-                Modelo adotado
-              </span>
-              <h3 className="text-base font-semibold text-brand">{grupo.nome}</h3>
-              <ul className="flex flex-col gap-1.5">
-                {grupo.linhas.map((l) => (
-                  <li
-                    key={l.produto.id}
-                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
-                  >
-                    <span className="text-gray-700">{l.produto.nome}</span>
-                    <span className="text-xs text-gray-500">
-                      {descreverAnos(l.item?.anosSelecionados ?? [])}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Cartao>
-          ))}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <LegendaOrigem modelos={modelosAdotados} />
+            <AlternadorVisao visao={visao} aoMudar={setVisao} />
+          </div>
 
-          {adicionais.length > 0 && (
-            <Cartao className="gap-2 p-5">
-              <span className="font-mono text-[11px] tracking-wider text-gray-500 uppercase">
-                Soluções adicionais
-              </span>
-              <ul className="flex flex-col gap-1.5">
-                {adicionais.map((l) => (
-                  <li
-                    key={l.produto.id}
-                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
-                  >
-                    <span className="flex flex-wrap items-center gap-1.5 text-gray-700">
-                      {l.produto.nome}
-                      {l.habilitacao.obrigatorios.length > 0 && <Selo tom="marca">obrigatória</Selo>}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {l.habilitacao.preco.base === 'escola'
-                        ? 'toda a unidade'
-                        : descreverAnos(l.item?.anosSelecionados ?? [])}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Cartao>
+          {visao === 'cards' ? (
+            <VisaoCards contratadas={contratadas} previsao={ctx.previsao} />
+          ) : (
+            <VisaoLista contratadas={contratadas} />
           )}
         </div>
       )}
 
-      {pendentesModelo.length > 0 && !somenteLeitura && (
+      {pendentes.length > 0 && !somenteLeitura && (
         <p className="rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-800">
-          Falta decidir: {pendentesModelo.map((l) => l.produto.nome).join(', ')}. Adote um modelo
-          que cubra essas avaliações —{' '}
-          <button type="button" onClick={aoIrParaModelo} className="underline">
-            ir para o modelo
-          </button>
-          .
-        </p>
-      )}
-
-      {pendentesEscolha.length > 0 && !somenteLeitura && (
-        <p className="rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-800">
-          Faltam decisões em: {pendentesEscolha.map((l) => l.produto.nome).join(', ')}. Volte às
-          soluções adicionais e marque os anos ou diga que não vai contratar — caixa vazia não diz
-          se você recusou ou se ainda não olhou.
+          Faltam decisões em: {pendentes.map((l) => l.produto.nome).join(', ')}. Volte às soluções
+          adicionais e marque os anos ou diga que não vai contratar — caixa vazia não diz se você
+          recusou ou se ainda não olhou.
         </p>
       )}
 
