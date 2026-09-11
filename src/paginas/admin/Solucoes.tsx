@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DialogoConfirmacao } from '@/componentes/Modal';
-import { Botao, Cartao, EsqueletoLinhas, EstadoVazio, Selo } from '@/componentes/ui';
+import {
+  Botao,
+  Cartao,
+  EsqueletoLinhas,
+  EstadoVazio,
+  LogoFornecedor,
+  Selo,
+} from '@/componentes/ui';
 import {
   duplicarProduto,
   excluirProduto,
@@ -118,7 +125,8 @@ export function Solucoes() {
 
   if (carregando) return <EsqueletoLinhas linhas={5} />;
 
-  const nomeFornecedor = (id: string) => fornecedores.find((f) => f.id === id)?.nome ?? '—';
+  const fornecedorDe = (id: string) => fornecedores.find((f) => f.id === id);
+  const nomeFornecedor = (id: string) => fornecedorDe(id)?.nome ?? '—';
 
   return (
     <div className="flex flex-col gap-5">
@@ -176,22 +184,28 @@ export function Solucoes() {
       ) : (
         <div className="flex flex-col gap-3">
           {produtos.map((p) => (
-            <Cartao key={p.id} className="gap-3 p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold text-brand">{p.nome}</h3>
-                    <Selo tom={SELO_VISIBILIDADE[p.visibilidade].tom}>
-                      {SELO_VISIBILIDADE[p.visibilidade].rotulo}
-                    </Selo>
+            <Cartao key={p.id} className="flex-row items-start gap-3 p-5">
+              <LogoFornecedor
+                nome={nomeFornecedor(p.fornecedorId)}
+                logo={fornecedorDe(p.fornecedorId)?.logo}
+                tamanho="md"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-semibold text-brand">{p.nome}</h3>
+                      <Selo tom={SELO_VISIBILIDADE[p.visibilidade].tom}>
+                        {SELO_VISIBILIDADE[p.visibilidade].rotulo}
+                      </Selo>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      {nomeFornecedor(p.fornecedorId)} · {p.categoria}
+                    </span>
+                    <span className="font-mono text-xs text-gray-500">
+                      {descreverPreco(p.precificacao)}
+                    </span>
                   </div>
-                  <span className="text-sm text-gray-500">
-                    {nomeFornecedor(p.fornecedorId)} · {p.categoria}
-                  </span>
-                  <span className="font-mono text-xs text-gray-500">
-                    {descreverPreco(p.precificacao)}
-                  </span>
-                </div>
                 <div className="flex gap-2">
                   <Botao
                     variante="secundario"
@@ -222,9 +236,10 @@ export function Solucoes() {
                   >
                     <IconeExcluir />
                   </Botao>
+                  </div>
                 </div>
+                {p.descricao && <p className="text-sm text-gray-500">{p.descricao}</p>}
               </div>
-              {p.descricao && <p className="text-sm text-gray-500">{p.descricao}</p>}
             </Cartao>
           ))}
         </div>

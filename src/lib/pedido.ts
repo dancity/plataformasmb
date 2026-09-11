@@ -48,7 +48,9 @@ export interface ContextoPedido {
   previsaoConfirmada: boolean;
   produtos: Produto[];
   regras: RegraHabilitacao[];
-  fornecedores: Map<string, string>;
+  /** Cadastro inteiro, não só o nome: a marca do fornecedor entra nos cards
+   *  da etapa de escolha, e ela vem na mesma leitura. */
+  fornecedores: Map<string, Fornecedor>;
   pedido: Pedido | null;
   itens: Map<string, ItemPedido>;
 }
@@ -112,7 +114,7 @@ export async function carregarContexto(sessao: Sessao): Promise<ContextoPedido |
     produtos: produtosSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Produto),
     regras: regrasSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as RegraHabilitacao),
     fornecedores: new Map(
-      fornecedoresSnap.docs.map((d) => [d.id, (d.data() as Fornecedor).nome]),
+      fornecedoresSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() } as Fornecedor]),
     ),
     pedido,
     itens,
@@ -378,7 +380,7 @@ export function resolverItensDoModelo(
     itens.push({
       produto: linha.produto,
       habilitacao: linha.habilitacao,
-      fornecedorNome: ctx.fornecedores.get(linha.produto.fornecedorId) ?? '',
+      fornecedorNome: ctx.fornecedores.get(linha.produto.fornecedorId)?.nome ?? '',
       previsao: ctx.previsao,
       decisao,
     });

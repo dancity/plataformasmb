@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getCountFromServer,
   getDoc,
@@ -232,17 +233,36 @@ export async function listarFornecedores(): Promise<Fornecedor[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Fornecedor);
 }
 
-export async function criarFornecedor(dados: {
+export interface DadosFornecedor {
   nome: string;
   cnpj?: string;
   contatoEmail?: string;
-}): Promise<string> {
+  /** Data URI já quadrado e reduzido — ver `prepararLogoQuadrado`. */
+  logo?: string;
+}
+
+export async function criarFornecedor(dados: DadosFornecedor): Promise<string> {
   const ref = await addDoc(collection(db, 'fornecedores'), {
     nome: dados.nome.trim(),
     ...(dados.cnpj?.trim() ? { cnpj: dados.cnpj.trim() } : {}),
     ...(dados.contatoEmail?.trim() ? { contatoEmail: dados.contatoEmail.trim() } : {}),
+    ...(dados.logo ? { logo: dados.logo } : {}),
   });
   return ref.id;
+}
+
+/**
+ * Edita o cadastro. Campo apagado na tela some do documento (`deleteField`),
+ * não vira string vazia: quem lê depois testa presença, e `logo: ''` seria
+ * uma marca quebrada em vez de marca nenhuma.
+ */
+export async function atualizarFornecedor(id: string, dados: DadosFornecedor): Promise<void> {
+  await updateDoc(doc(db, 'fornecedores', id), {
+    nome: dados.nome.trim(),
+    cnpj: dados.cnpj?.trim() ? dados.cnpj.trim() : deleteField(),
+    contatoEmail: dados.contatoEmail?.trim() ? dados.contatoEmail.trim() : deleteField(),
+    logo: dados.logo ? dados.logo : deleteField(),
+  });
 }
 
 export async function excluirFornecedor(id: string): Promise<void> {

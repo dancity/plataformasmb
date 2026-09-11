@@ -6,6 +6,7 @@ import {
   Cartao,
   Entrada,
   EstadoVazio,
+  LogoFornecedor,
   Selo,
   juntar,
 } from '@/componentes/ui';
@@ -197,7 +198,7 @@ export function EtapaEscolha({
           pedidoId,
           atual.produto,
           atual.habilitacao,
-          ctx.fornecedores.get(atual.produto.fornecedorId) ?? '',
+          ctx.fornecedores.get(atual.produto.fornecedorId)?.nome ?? '',
           ctx.previsao,
           {
             anos: [...marcados],
@@ -254,6 +255,7 @@ export function EtapaEscolha({
   }
 
   const { produto, habilitacao } = atual;
+  const fornecedor = ctx.fornecedores.get(produto.fornecedorId);
   const temObrigatorio = habilitacao.obrigatorios.length > 0;
   const porCredito = habilitacao.preco.base === 'credito';
   const ehRedacao = produto.categoria === CATEGORIA_REDACAO;
@@ -359,55 +361,59 @@ export function EtapaEscolha({
 
       <div className="flex flex-col gap-4">
         {/* Quem é a solução: nome, quem fornece, o que é, quanto custa. */}
-        <Cartao className="gap-3 p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-semibold text-brand">{produto.nome}</h2>
-                {temObrigatorio ? (
-                  <Selo tom="marca">obrigatória</Selo>
-                ) : (
-                  <Selo tom="neutro">opcional</Selo>
-                )}
-              </div>
-              <span className="text-sm text-gray-500">
-                Fornecido por:{' '}
-                <span className="font-medium text-gray-700">
-                  {ctx.fornecedores.get(produto.fornecedorId)}
+        {/* Marca à esquerda, o resto numa coluna só: descrição e preço
+            alinham com o nome da solução, não com a borda do cartão. */}
+        <Cartao className="flex-row items-start gap-4 p-6">
+          <LogoFornecedor nome={fornecedor?.nome ?? '?'} logo={fornecedor?.logo} tamanho="lg" />
+
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-semibold text-brand">{produto.nome}</h2>
+                  {temObrigatorio ? (
+                    <Selo tom="marca">obrigatória</Selo>
+                  ) : (
+                    <Selo tom="neutro">opcional</Selo>
+                  )}
+                </div>
+                <span className="text-sm text-gray-500">
+                  Fornecido por:{' '}
+                  <span className="font-medium text-gray-700">{fornecedor?.nome ?? '—'}</span>
                 </span>
-              </span>
+              </div>
+
+              {produto.materialUrl && (
+                <BotaoLink
+                  variante="secundario"
+                  tamanho="sm"
+                  href={produto.materialUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Saiba mais
+                  <IconeExterno />
+                </BotaoLink>
+              )}
             </div>
 
-            {produto.materialUrl && (
-              <BotaoLink
-                variante="secundario"
-                tamanho="sm"
-                href={produto.materialUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Saiba mais
-                <IconeExterno />
-              </BotaoLink>
+            {produto.descricao && (
+              <p className="max-w-prose text-sm text-gray-500">{produto.descricao}</p>
             )}
-          </div>
 
-          {produto.descricao && (
-            <p className="max-w-prose text-sm text-gray-500">{produto.descricao}</p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
-            <span className="rounded-lg bg-gray-100 px-3 py-1.5 font-mono text-xs text-brand">
-              {descreverPreco(habilitacao.preco)}
-            </span>
-            {ctx.unidade.tipo === 'social' && produto.precoSocialHabilitado && (
-              <Selo tom="ok">preço social da sua unidade</Selo>
-            )}
-            {habilitacao.preco.base === 'escola' && (
-              <span className="text-xs text-gray-500">
-                Cobrança por unidade: marcar mais anos não altera o valor.
+            <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+              <span className="rounded-lg bg-gray-100 px-3 py-1.5 font-mono text-xs text-brand">
+                {descreverPreco(habilitacao.preco)}
               </span>
-            )}
+              {ctx.unidade.tipo === 'social' && produto.precoSocialHabilitado && (
+                <Selo tom="ok">preço social da sua unidade</Selo>
+              )}
+              {habilitacao.preco.base === 'escola' && (
+                <span className="text-xs text-gray-500">
+                  Cobrança por unidade: marcar mais anos não altera o valor.
+                </span>
+              )}
+            </div>
           </div>
         </Cartao>
 

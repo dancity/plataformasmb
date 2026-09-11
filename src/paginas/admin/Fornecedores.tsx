@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DialogoConfirmacao, Modal } from '@/componentes/Modal';
 import {
   Botao,
@@ -7,21 +7,32 @@ import {
   Entrada,
   EsqueletoLinhas,
   EstadoVazio,
+  LogoFornecedor,
 } from '@/componentes/ui';
-import { criarFornecedor, excluirFornecedor, listarFornecedores } from '@/lib/dados';
+import {
+  atualizarFornecedor,
+  criarFornecedor,
+  excluirFornecedor,
+  listarFornecedores,
+} from '@/lib/dados';
+import { prepararLogoQuadrado } from '@/lib/imagem';
 import type { Fornecedor } from '@dominio/tipos';
 
 export function Fornecedores() {
   const [carregando, setCarregando] = useState(true);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [aberto, setAberto] = useState(false);
+  const [editando, setEditando] = useState<Fornecedor | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [nome, setNome] = useState('');
   const [cnpj, setCnpj] = useState('');
   const [contatoEmail, setContatoEmail] = useState('');
+  const [logo, setLogo] = useState<string | undefined>(undefined);
+  const [processandoLogo, setProcessandoLogo] = useState(false);
   const [excluindo, setExcluindo] = useState<Fornecedor | null>(null);
   const [apagando, setApagando] = useState(false);
+  const seletorArquivo = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -37,15 +48,50 @@ export function Fornecedores() {
     void carregar();
   }, [carregar]);
 
+  function abrirNovo() {
+    setEditando(null);
+    setNome('');
+    setCnpj('');
+    setContatoEmail('');
+    setLogo(undefined);
+    setErro(null);
+    setAberto(true);
+  }
+
+  function abrirEdicao(f: Fornecedor) {
+    setEditando(f);
+    setNome(f.nome);
+    setCnpj(f.cnpj ?? '');
+    setContatoEmail(f.contatoEmail ?? '');
+    setLogo(f.logo);
+    setErro(null);
+    setAberto(true);
+  }
+
+  async function escolherLogo(arquivo: File | undefined) {
+    if (!arquivo) return;
+    setProcessandoLogo(true);
+    setErro(null);
+    try {
+      // Recorta e reduz aqui, antes de qualquer gravação: o que entra na
+      // pré-visualização é exatamente o que vai para o banco.
+      setLogo(await prepararLogoQuadrado(arquivo));
+    } catch (e) {
+      setErro((e as Error).message);
+    } finally {
+      setProcessandoLogo(false);
+      if (seletorArquivo.current) seletorArquivo.current.value = '';
+    }
+  }
+
   async function salvar() {
     setSalvando(true);
     setErro(null);
     try {
       if (!nome.trim()) throw new Error('O fornecedor precisa de um nome.');
-      await criarFornecedor({ nome, cnpj, contatoEmail });
-      setNome('');
-      setCnpj('');
-      setContatoEmail('');
+      const dados = { nome, cnpj, contatoEmail, logo };
+      if (editando) await atualizarFornecedor(editando.id, dados);
+      else await criarFornecedor(dados);
       setAberto(false);
       await carregar();
     } catch (e) {
@@ -67,10 +113,10 @@ export function Fornecedores() {
             fornecedor sair certo, sem duas grafias do mesmo nome virarem duas linhas.
           </p>
         </div>
-        <Botao onClick={() => setAberto(true)}>Novo fornecedor</Botao>
+        <Botao onClick={abrirNovo}>Novo fornecedor</Botao>
       </div>
 
-      {erro && (
+      {erro && !aberto && (
         <p role="alert" className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800">
           {erro}
         </p>
@@ -81,20 +127,28 @@ export function Fornecedores() {
           icone={<span aria-hidden="true">🏷️</span>}
           titulo="Nenhum fornecedor cadastrado"
           descricao="Cada solução do catálogo aponta para um fornecedor. Cadastre os que você já sabe que vão entrar no ciclo — dá para acrescentar outros a qualquer momento."
-          acao={<Botao onClick={() => setAberto(true)}>Cadastrar o primeiro</Botao>}
+          acao={<Botao onClick={abrirNovo}>Cadastrar o primeiro</Botao>}
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {fornecedores.map((f) => (
-            <Cartao key={f.id} className="gap-1 p-4">
-              <div className="flex items-start justify-between gap-2">
+            <Cartao key={f.id} className="flex-row items-start gap-3 p-4">
+              <LogoFornecedor nome={f.nome} logo={f.logo} tamanho="md" />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="font-medium text-gray-700">{f.nome}</span>
+                {f.cnpj && <span className="font-mono text-xs text-gray-500">{f.cnpj}</span>}
+                {f.contatoEmail && (
+                  <span className="truncate text-xs text-gray-500">{f.contatoEmail}</span>
+                )}
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <Botao variante="secundario" tamanho="sm" onClick={() => abrirEdicao(f)}>
+                  Editar
+                </Botao>
                 <Botao variante="fantasma" tamanho="sm" onClick={() => setExcluindo(f)}>
                   Excluir
                 </Botao>
               </div>
-              {f.cnpj && <span className="font-mono text-xs text-gray-500">{f.cnpj}</span>}
-              {f.contatoEmail && <span className="text-xs text-gray-500">{f.contatoEmail}</span>}
             </Cartao>
           ))}
         </div>
@@ -103,18 +157,53 @@ export function Fornecedores() {
       <Modal
         aberto={aberto}
         aoFechar={() => setAberto(false)}
-        titulo="Novo fornecedor"
+        titulo={editando ? `Editar ${editando.nome}` : 'Novo fornecedor'}
         rodape={
           <>
             <Botao variante="secundario" onClick={() => setAberto(false)} disabled={salvando}>
               Cancelar
             </Botao>
-            <Botao onClick={() => void salvar()} carregando={salvando}>
-              Cadastrar
+            <Botao onClick={() => void salvar()} carregando={salvando} disabled={processandoLogo}>
+              {editando ? 'Salvar' : 'Cadastrar'}
             </Botao>
           </>
         }
       >
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-200 p-4">
+          <LogoFornecedor nome={nome || '?'} logo={logo} tamanho="lg" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium text-gray-700">Marca do fornecedor</span>
+              <span className="text-xs text-gray-500">
+                Quadrada. Imagem retangular é recortada pelo centro, e o arquivo é reduzido antes
+                de salvar — mande a melhor que tiver.
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Botao
+                variante="secundario"
+                tamanho="sm"
+                carregando={processandoLogo}
+                onClick={() => seletorArquivo.current?.click()}
+              >
+                {logo ? 'Trocar imagem' : 'Escolher imagem'}
+              </Botao>
+              {logo && (
+                <Botao variante="fantasma" tamanho="sm" onClick={() => setLogo(undefined)}>
+                  Remover
+                </Botao>
+              )}
+            </div>
+            <input
+              ref={seletorArquivo}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              className="hidden"
+              onChange={(e) => void escolherLogo(e.target.files?.[0])}
+            />
+          </div>
+        </div>
+
         <Campo rotulo="Nome" obrigatorio>
           <Entrada value={nome} onChange={(e) => setNome(e.target.value)} placeholder="MakerLab" />
         </Campo>

@@ -128,6 +128,65 @@ export function Cartao({
   );
 }
 
+// ─── Marca do fornecedor ─────────────────────────────────────────
+
+const TAMANHO_LOGO = {
+  sm: 'h-8 w-8 rounded-lg text-[11px]',
+  md: 'h-11 w-11 rounded-xl text-xs',
+  lg: 'h-14 w-14 rounded-2xl text-sm',
+} as const;
+
+/** Duas letras no máximo: a primeira de cada palavra que conta. */
+function iniciais(nome: string): string {
+  const palavras = nome
+    .trim()
+    .split(/\s+/)
+    .filter((p) => p.length > 2 || /^[A-ZÀ-Ú]/.test(p));
+  const escolhidas = (palavras.length > 0 ? palavras : nome.trim().split(/\s+/)).slice(0, 2);
+  return escolhidas.map((p) => p[0]?.toUpperCase() ?? '').join('');
+}
+
+/**
+ * A marca do fornecedor no tamanho quadrado. Sem imagem cadastrada, as
+ * iniciais ocupam o mesmo espaço — o card não muda de forma nem dança de
+ * layout conforme o fornecedor tenha ou não mandado o logo.
+ *
+ * A moldura é `bg-white`, que no tema escuro vira superfície: marca clara
+ * sobre fundo escuro continua legível, e o contorno segura o logo que tem
+ * fundo branco embutido.
+ */
+export function LogoFornecedor({
+  nome,
+  logo,
+  tamanho = 'md',
+  className,
+}: {
+  nome: string;
+  logo?: string;
+  tamanho?: keyof typeof TAMANHO_LOGO;
+  className?: string;
+}) {
+  const base = juntar(
+    'flex shrink-0 items-center justify-center overflow-hidden border border-gray-200 bg-white',
+    TAMANHO_LOGO[tamanho],
+    className,
+  );
+
+  if (!logo) {
+    return (
+      <span aria-hidden="true" className={juntar(base, 'font-semibold text-gray-400')}>
+        {iniciais(nome)}
+      </span>
+    );
+  }
+
+  return (
+    <span className={base}>
+      <img src={logo} alt="" className="h-full w-full object-cover" loading="lazy" />
+    </span>
+  );
+}
+
 // ─── Selo de status ──────────────────────────────────────────────
 
 export type TomStatus = 'ok' | 'atencao' | 'erro' | 'concluido' | 'neutro' | 'marca';

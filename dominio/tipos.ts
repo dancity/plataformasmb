@@ -93,6 +93,15 @@ export interface Fornecedor {
   cnpj?: string;
   contatoNome?: string;
   contatoEmail?: string;
+  /**
+   * Marca do fornecedor, quadrada, como data URI. Mora no próprio documento
+   * em vez de num bucket porque já chega pequena — o upload recorta e reduz
+   * antes de gravar — e porque assim vem junto com o nome na mesma leitura
+   * que as telas já fazem: sem segunda requisição, sem URL que expira, sem
+   * Storage para configurar. O teto de 1 MB por documento do Firestore é o
+   * limite duro; `prepararLogoQuadrado` para muito antes dele.
+   */
+  logo?: string;
 }
 
 // ─── Ciclo ───────────────────────────────────────────────────────
