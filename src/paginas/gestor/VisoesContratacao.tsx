@@ -95,45 +95,68 @@ export function AlternadorVisao({
 }
 
 /**
- * Origem é sinal, não enfeite: ponto cheio veio de modelo, ponto vazado é
- * escolha avulsa. A forma carrega o sentido sozinha — quem não distingue as
- * cores lê a mesma coisa.
+ * Origem colore o cartão inteiro, não um ponto no canto: numa grade com
+ * dezenas de cartões, a mancha de cor é o que se lê de longe.
+ *
+ * Violeta e verde-azulado são as duas famílias que sobraram sem significado
+ * no app — verde é "ok", âmbar é "atenção", vermelho é erro, laranja é
+ * obrigatória e azul é a marca. Usar qualquer uma dessas aqui faria a grade
+ * parecer cheia de avisos. Ambas entram em tom 50/200, claras o bastante
+ * para o nome preto continuar legível por cima, e as duas são invertidas em
+ * `tema-escuro.css` — cor fora dessa lista quebraria o tema escuro.
  */
-function PontoOrigem({ deModelo, className }: { deModelo: boolean; className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={juntar(
-        'h-2 w-2 shrink-0 rounded-full',
-        deModelo ? 'bg-brand-medium' : 'border border-gray-400',
-        className,
-      )}
-    />
-  );
+const ESTILO_ORIGEM = {
+  modelo: 'border-violet-300 bg-violet-50',
+  adicional: 'border-teal-300 bg-teal-50',
+} as const;
+
+const SWATCH_ORIGEM = {
+  modelo: 'border-violet-300 bg-violet-200',
+  adicional: 'border-teal-300 bg-teal-200',
+} as const;
+
+function chaveOrigem(deModelo: boolean): keyof typeof ESTILO_ORIGEM {
+  return deModelo ? 'modelo' : 'adicional';
 }
 
+/** A legenda é o que ensina a leitura da cor — sem ela, tom de fundo não
+ *  quer dizer nada para quem abre a tela pela primeira vez. */
 export function LegendaOrigem({ modelos }: { modelos: readonly string[] }) {
+  const itens = [
+    ...modelos.map((nome) => ({ nome, chave: 'modelo' as const })),
+    { nome: 'soluções adicionais', chave: 'adicional' as const },
+  ];
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
-      {modelos.length > 0 && (
-        <span className="flex items-center gap-1.5">
-          <PontoOrigem deModelo />
-          {modelos.join(' · ')}
+    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+      {itens.map((i) => (
+        <span
+          key={`${i.chave}-${i.nome}`}
+          className={juntar(
+            'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1',
+            ESTILO_ORIGEM[i.chave],
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className={juntar('h-2.5 w-2.5 rounded-full border', SWATCH_ORIGEM[i.chave])}
+          />
+          {i.nome}
         </span>
-      )}
-      <span className="flex items-center gap-1.5">
-        <PontoOrigem deModelo={false} />
-        soluções adicionais
-      </span>
+      ))}
     </div>
   );
 }
 
-/** O número que importa naquele ano: crédito quando há, licença quando não. */
+/** O número que importa naquele ano: crédito quando há, licença quando a
+ *  cobrança é por aluno, e aluno alcançado quando é por unidade — nesse
+ *  caso não existe licença por ano, o contrato é um só. */
 function medidaDoAno(c: Contratada, ano: AnoEscolarId): { numero: number; rotulo: string } {
   const creditos = c.creditosPorAno?.[ano];
   if (creditos !== undefined) return { numero: creditos, rotulo: 'créditos' };
-  return { numero: c.licencasPorAno[ano] ?? 0, rotulo: 'licenças' };
+  return {
+    numero: c.licencasPorAno[ano] ?? 0,
+    rotulo: c.porUnidade ? 'alunos alcançados' : 'licenças',
+  };
 }
 
 // ─── Visão em cards, uma coluna por ano escolar ──────────────────
@@ -145,36 +168,21 @@ export function VisaoCards({
   contratadas: readonly Contratada[];
   previsao: PrevisaoPorAno;
 }) {
-  const porAno = contratadas.filter((c) => !c.porUnidade);
-  const daUnidade = contratadas.filter((c) => c.porUnidade);
-
-  // Só os anos que de fato recebem alguma coisa — coluna vazia é ruído, e
-  // cada coluna a menos é largura que sobra pras que importam.
+  // Toda solução entra nas colunas dos anos em que foi contratada — inclusive
+  // a cobrada por unidade. Separar "toda a unidade" numa faixa à parte usava a
+  // BASE DE COBRANÇA como se fosse alcance pedagógico, e as duas coisas são
+  // independentes: uma licença única da escola pode valer só para o 5º, o 9º e
+  // a 3ª série. O efeito era esconder os anos reais justamente de quem abre o
+  // mapa para conferir ano a ano. Repetir o nome em várias colunas é o preço,
+  // e é o preço certo.
   const colunas = useMemo(() => {
     const comAlgo = new Set<AnoEscolarId>();
-    for (const c of porAno) for (const a of c.anos) comAlgo.add(a);
+    for (const c of contratadas) for (const a of c.anos) comAlgo.add(a);
     return ANOS_ESCOLARES.filter((a) => comAlgo.has(a.id)).map((a) => a.id);
-  }, [porAno]);
+  }, [contratadas]);
 
   return (
     <div className="flex flex-col gap-3">
-      {daUnidade.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
-          <span className="font-mono text-[11px] tracking-wider text-gray-500 uppercase">
-            Toda a unidade
-          </span>
-          {daUnidade.map((c) => (
-            <span
-              key={c.id}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700"
-            >
-              <PontoOrigem deModelo={!!c.modelo} />
-              {c.nome}
-            </span>
-          ))}
-        </div>
-      )}
-
       {colunas.length > 0 && (
         <div className="overflow-x-auto pb-1">
           {/* As colunas dividem a largura disponível em partes iguais, então
@@ -189,7 +197,7 @@ export function VisaoCards({
             }}
           >
             {colunas.map((ano) => {
-              const doAno = porAno.filter((c) => c.anos.includes(ano));
+              const doAno = contratadas.filter((c) => c.anos.includes(ano));
               return (
                 <div key={ano} className="flex flex-col gap-1.5">
                   <div className="rounded-lg bg-gray-100 px-1 py-1.5 text-center">
@@ -207,20 +215,20 @@ export function VisaoCards({
                       <div
                         key={c.id}
                         title={`${c.nome} — ${numero} ${rotulo}${c.modelo ? ` · ${c.modelo}` : ''}`}
-                        className="flex flex-col gap-0.5 rounded-lg border border-gray-200 bg-white px-1 py-1.5"
+                        className={juntar(
+                          'flex flex-col gap-0.5 rounded-lg border px-1 py-1.5',
+                          ESTILO_ORIGEM[chaveOrigem(!!c.modelo)],
+                        )}
                       >
                         {/* Coluna estreita é o preço de caber tudo numa tela:
                             o nome usa a mesma escala densa dos números. Nome
                             comprido ainda pode quebrar — daí o title e a
                             visão em lista, onde ele aparece inteiro. */}
-                        <span className="text-[10px] leading-[1.25] break-words hyphens-auto text-gray-700">
+                        <span className="text-[10px] leading-[1.25] break-words hyphens-auto text-gray-800">
                           {c.nome}
                         </span>
-                        <span className="flex items-center justify-between gap-1">
-                          <PontoOrigem deModelo={!!c.modelo} />
-                          <span className="font-mono text-[10px] text-gray-400 tabular-nums">
-                            {numero}
-                          </span>
+                        <span className="text-right font-mono text-[10px] text-gray-500 tabular-nums">
+                          {numero}
                         </span>
                         <span className="sr-only">
                           {numero} {rotulo}
@@ -288,10 +296,21 @@ export function VisaoLista({ contratadas }: { contratadas: readonly Contratada[]
             <tbody key={grupo.titulo}>
               {/* Uma célula só, com flex por dentro: assim o cabeçalho do
                   grupo não depende de quantas colunas estão visíveis. */}
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr
+                className={juntar(
+                  'border-b',
+                  ESTILO_ORIGEM[chaveOrigem(grupo.deModelo)],
+                )}
+              >
                 <th colSpan={4} className="px-3 py-2 text-left sm:px-4">
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <PontoOrigem deModelo={grupo.deModelo} />
+                    <span
+                      aria-hidden="true"
+                      className={juntar(
+                        'h-2.5 w-2.5 shrink-0 rounded-full border',
+                        SWATCH_ORIGEM[chaveOrigem(grupo.deModelo)],
+                      )}
+                    />
                     <span className="text-xs font-semibold tracking-wide text-gray-600 uppercase">
                       {grupo.titulo}
                     </span>
@@ -317,14 +336,20 @@ export function VisaoLista({ contratadas }: { contratadas: readonly Contratada[]
                       {c.obrigatoria && <Selo tom="marca">obrigatória</Selo>}
                     </span>
                     <span className="mt-0.5 block text-xs text-gray-500 md:hidden">
-                      {c.porUnidade ? 'toda a unidade' : descreverAnos(c.anos)}
+                      {descreverAnos(c.anos)}
                     </span>
                   </td>
                   <td className="hidden px-3 py-2.5 text-xs text-gray-500 md:table-cell">
-                    {c.porUnidade ? 'toda a unidade' : descreverAnos(c.anos)}
+                    {descreverAnos(c.anos)}
                   </td>
+                  {/* Cobrança por unidade não tem licença por aluno: o
+                      contrato é um só, valha para um ano ou para dez. */}
                   <td className="px-2 py-2.5 text-right font-mono text-xs whitespace-nowrap text-gray-600 tabular-nums sm:px-3">
-                    {c.creditos > 0 ? `${c.creditos} créd.` : c.porUnidade ? '—' : c.licencas}
+                    {c.creditos > 0
+                      ? `${c.creditos} créd.`
+                      : c.porUnidade
+                        ? 'por unidade'
+                        : c.licencas}
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono whitespace-nowrap text-gray-700 tabular-nums sm:px-4">
                     {formatarBRL(c.valorAnual)}
