@@ -170,10 +170,9 @@ export function EtapaModelo({
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold text-brand">Modelo de avaliação em larga escala</h2>
         <p className="max-w-prose text-sm text-gray-500">
-          Um modelo é um pacote fechado de avaliações — a unidade adota o pacote inteiro, não
-          avaliação por avaliação. Visualize antes de decidir; ao adotar, cada avaliação entra
-          marcada nos anos habilitados para a sua regional, com o valor calculado sobre a previsão
-          de alunos da unidade.
+          Um modelo é um pacote fechado de avaliações: a unidade adota o pacote inteiro, não
+          avaliação por avaliação. Visualize antes de decidir — ao adotar, o valor é calculado
+          sobre a previsão de alunos da unidade.
         </p>
       </div>
 
@@ -240,7 +239,7 @@ export function EtapaModelo({
 
       {obrigatoriasSemModelo.length > 0 && (
         <p className="text-sm text-gray-500">
-          Já inclusas obrigatoriamente pela sua regional, sem depender de nenhum modelo:{' '}
+          Já inclusas obrigatoriamente, sem depender de nenhum modelo:{' '}
           {obrigatoriasSemModelo.map((l) => l.produto.nome).join(', ')}.
         </p>
       )}
@@ -307,7 +306,7 @@ export function EtapaModelo({
         descricao={
           modeloSobrescreve
             ? 'Alguma destas avaliações já tem decisão gravada — adotar o modelo substitui a decisão atual dela.'
-            : 'O valor de cada avaliação é calculado sobre a previsão de alunos da sua unidade nos anos habilitados.'
+            : 'O valor de cada avaliação é calculado sobre a previsão de alunos da sua unidade.'
         }
         detalhe={
           <div className="flex flex-col gap-2">
@@ -399,9 +398,8 @@ export function EtapaModelo({
 
 /**
  * Colunas = anos escolares que a unidade oferta; linhas = avaliações do
- * modelo disponíveis para a regional do gestor. Marca quando a avaliação
- * entra naquele ano — é o "puxa quantidade de alunos e aplica" em forma de
- * tabela, sem nenhum número ainda: números só na hora de adotar.
+ * modelo. Marca quando a avaliação entra naquele ano — números só na hora
+ * de adotar.
  */
 function GradeModelo({
   itens,
