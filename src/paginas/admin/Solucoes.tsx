@@ -131,17 +131,19 @@ export function Solucoes() {
           </p>
         </div>
         <div className="flex gap-2">
-          {produtos.length > 0 && (
-            <Botao variante="fantasma" onClick={() => setExcluindoTudo(true)}>
-              Excluir todas
-            </Botao>
-          )}
           <Botao
             onClick={() => navegar('/admin/solucoes/novo')}
             disabled={fornecedores.length === 0}
           >
             Nova solução
           </Botao>
+          {/* Destrutiva: fica depois da ação de rotina, não ao lado dela —
+              não é o botão que a mão deveria encontrar primeiro. */}
+          {produtos.length > 0 && (
+            <Botao variante="fantasma" onClick={() => setExcluindoTudo(true)}>
+              Excluir todas
+            </Botao>
+          )}
         </div>
       </div>
 

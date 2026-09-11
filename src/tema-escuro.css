@@ -130,6 +130,13 @@
   background-color: var(--ui-surface);
 }
 
+/* A versão com opacidade (rodapé colado de formulário, com blur) é uma
+   classe própria pro Tailwind — a regra acima não alcança. Sem isto, o
+   rodapé fica quase branco sobre conteúdo escuro. */
+.dark .bg-white\/95 {
+  background-color: color-mix(in oklab, var(--ui-surface) 95%, transparent);
+}
+
 /* Botão SÓLIDO de perigo: com a inversão, red-600 vira claro e o texto
    branco some nele. Só o FUNDO volta a escurecer. */
 .dark .bg-red-600 {
