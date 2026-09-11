@@ -267,7 +267,7 @@ export function EtapaModelo({
         aberto={!!modeloVisualizando}
         aoFechar={() => setModeloVisualizando(null)}
         titulo={modeloVisualizando?.nome ?? ''}
-        descricao={modeloVisualizando?.descricao || 'Em quais anos escolares cada avaliação entra, para a sua regional.'}
+        descricao={modeloVisualizando?.descricao || 'Em quais anos escolares cada avaliação entra'}
         largura="xxl"
         rodape={
           <>
