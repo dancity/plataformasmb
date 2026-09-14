@@ -15,6 +15,7 @@ import {
   excluirTodosProdutos,
   listarFornecedores,
   listarProdutos,
+  reordenarProdutos,
 } from '@/lib/dados';
 import type { Fornecedor, Produto } from '@dominio/tipos';
 import { descreverPreco, formatarBRL } from '@dominio/preco';
@@ -57,6 +58,56 @@ function IconeExcluir() {
       <path d="M10 11v6" />
       <path d="M14 11v6" />
     </IconeSvg>
+  );
+}
+
+function IconeSubir() {
+  return (
+    <IconeSvg>
+      <path d="M18 15l-6-6-6 6" />
+    </IconeSvg>
+  );
+}
+
+function IconeDescer() {
+  return (
+    <IconeSvg>
+      <path d="M6 9l6 6 6-6" />
+    </IconeSvg>
+  );
+}
+
+/**
+ * Seta do punho de reordenar. Não usa o `Botao` de ação de propósito: no
+ * tamanho `icone` a pilha de duas setas fica mais alta que o conteúdo do
+ * cartão e passa a ditar a altura da lista inteira. Aqui ela tem 28px — o
+ * piso de alvo clicável em tela de mouse — e o cartão volta a ter a altura
+ * do que está escrito nele.
+ */
+function BotaoOrdem({
+  rotulo,
+  titulo,
+  desabilitado,
+  aoClicar,
+  children,
+}: {
+  rotulo: string;
+  titulo: string;
+  desabilitado: boolean;
+  aoClicar: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={rotulo}
+      title={titulo}
+      disabled={desabilitado}
+      onClick={aoClicar}
+      className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:pointer-events-none disabled:opacity-30"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -109,6 +160,32 @@ export function Solucoes() {
     }
   }, [ciclo]);
 
+  /**
+   * Sobe ou desce uma solução. A tela responde na hora e o Firestore confirma
+   * depois: reordenar é gesto repetido, e esperar a ida e volta a cada clique
+   * transformaria uma arrumação de trinta segundos numa fila de espera. Se a
+   * gravação falhar, a lista recarrega — vale o que está gravado, nunca uma
+   * ordem que só existe nesta aba.
+   */
+  const mover = useCallback(
+    (indice: number, direcao: -1 | 1) => {
+      const destino = indice + direcao;
+      if (destino < 0 || destino >= produtos.length) return;
+
+      const nova = [...produtos];
+      const [movida] = nova.splice(indice, 1);
+      nova.splice(destino, 0, movida!);
+      setProdutos(nova);
+      setErro(null);
+
+      void reordenarProdutos(nova).catch(() => {
+        setErro('Não foi possível salvar a nova ordem. A lista voltou para a ordem gravada.');
+        void carregar();
+      });
+    },
+    [produtos, carregar],
+  );
+
   useEffect(() => {
     void carregar();
   }, [carregar]);
@@ -134,8 +211,9 @@ export function Solucoes() {
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-semibold text-brand">Soluções do ciclo {ciclo.anoAlvo}</h1>
           <p className="text-sm text-gray-500">
-            A ordem aqui é a ordem em que o gestor decide, uma solução por vez. Obrigatórias
-            primeiro, para ele conhecer o piso do orçamento antes de escolher qualquer opcional.
+            A ordem aqui é a ordem em que o gestor decide, uma solução por vez — use as setas
+            para arrumar. Obrigatórias primeiro, para ele conhecer o piso do orçamento antes de
+            escolher qualquer opcional.
           </p>
         </div>
         <div className="flex gap-2">
@@ -183,8 +261,32 @@ export function Solucoes() {
         />
       ) : (
         <div className="flex flex-col gap-3">
-          {produtos.map((p) => (
+          {produtos.map((p, i) => (
             <Cartao key={p.id} className="flex-row items-start gap-3 p-5">
+              {/* Na borda de entrada, como em toda lista reordenável: é o
+                  primeiro lugar onde a mão procura. O número no meio diz em que
+                  posição a solução está sem obrigar a contar os cartões. */}
+              <div className="flex shrink-0 flex-col items-center">
+                <BotaoOrdem
+                  rotulo={`Subir ${p.nome} para a posição ${i}`}
+                  titulo="Subir"
+                  desabilitado={i === 0}
+                  aoClicar={() => mover(i, -1)}
+                >
+                  <IconeSubir />
+                </BotaoOrdem>
+                <span className="font-mono text-[11px] leading-none text-gray-400 tabular-nums">
+                  {i + 1}
+                </span>
+                <BotaoOrdem
+                  rotulo={`Descer ${p.nome} para a posição ${i + 2}`}
+                  titulo="Descer"
+                  desabilitado={i === produtos.length - 1}
+                  aoClicar={() => mover(i, 1)}
+                >
+                  <IconeDescer />
+                </BotaoOrdem>
+              </div>
               <LogoFornecedor
                 nome={nomeFornecedor(p.fornecedorId)}
                 logo={fornecedorDe(p.fornecedorId)?.logo}

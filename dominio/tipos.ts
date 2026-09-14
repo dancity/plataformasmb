@@ -173,7 +173,13 @@ export interface Produto {
    */
   precificacaoSocial?: Precificacao;
   precoSocialHabilitado?: boolean;
-  /** Ordem na etapa de escolha. Obrigatórias primeiro, por convenção. */
+  /**
+   * Ordem na etapa de escolha, em sequência normalizada (1, 2, 3…). Quem
+   * define é o botão de subir/descer na tela de Soluções, não um número
+   * digitado no cadastro: ordem é uma relação entre as soluções, e digitar
+   * número solto permitia empate — que o Firestore desempata sozinho, sem
+   * aviso. Obrigatórias primeiro, por convenção.
+   */
   ordem: number;
   visibilidade: Visibilidade;
   criadoEm: DataISO;

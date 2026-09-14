@@ -33,6 +33,13 @@ export interface Contratada {
   valorAnual: number;
 }
 
+/**
+ * As contratadas em ordem de leitura: primeiro o que veio do modelo, depois o
+ * que a unidade escolheu por conta. O modelo é o piso — quem confere o mapa
+ * quer ver o pacote fechado primeiro e o acréscimo depois, não os dois
+ * embaralhados pela ordem do catálogo. Dentro de cada bloco a ordem do
+ * catálogo se mantém, porque `sort` é estável.
+ */
 export function montarContratadas(linhas: readonly LinhaCalculada[]): Contratada[] {
   return linhas
     .filter((l) => (l.item?.anosSelecionados.length ?? 0) > 0)
@@ -54,7 +61,8 @@ export function montarContratadas(linhas: readonly LinhaCalculada[]): Contratada
           : 0,
         valorAnual: item.valorAnual,
       };
-    });
+    })
+    .sort((a, b) => Number(!!b.modelo) - Number(!!a.modelo));
 }
 
 // ─── Alternador ──────────────────────────────────────────────────
@@ -266,6 +274,8 @@ function agruparPorOrigem(contratadas: readonly Contratada[]) {
     grupos.get(chave)!.itens.push(c);
   }
   // Modelo primeiro: é o pacote fechado, a base sobre a qual o resto se soma.
+  // (`montarContratadas` já entrega nessa ordem; o sort mantém a garantia aqui
+  // mesmo se a lista chegar de outro lugar.)
   return [...grupos.values()].sort((a, b) => Number(b.deModelo) - Number(a.deModelo));
 }
 

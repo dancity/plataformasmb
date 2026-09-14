@@ -7,6 +7,7 @@ import {
   getCountFromServer,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   serverTimestamp,
@@ -283,16 +284,58 @@ export async function obterProduto(id: string): Promise<Produto | null> {
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Produto) : null;
 }
 
-export type DadosProduto = Omit<Produto, 'id' | 'criadoEm' | 'atualizadoEm'>;
+/**
+ * Sem `ordem`: a posição na etapa de escolha não é campo de formulário, é o
+ * resultado de arrastar a solução para cima ou para baixo na lista. Criar
+ * coloca no fim; `reordenarProdutos` é quem mexe daí em diante.
+ */
+export type DadosProduto = Omit<Produto, 'id' | 'criadoEm' | 'atualizadoEm' | 'ordem'>;
+
+/** A próxima posição livre no fim da fila do ciclo. */
+async function proximaOrdem(cicloId: string): Promise<number> {
+  const snap = await getDocs(
+    query(
+      collection(db, 'produtos'),
+      where('cicloId', '==', cicloId),
+      orderBy('ordem', 'desc'),
+      limit(1),
+    ),
+  );
+  const ultima = snap.docs[0]?.data().ordem;
+  return typeof ultima === 'number' ? ultima + 1 : 1;
+}
 
 export async function criarProduto(dados: DadosProduto): Promise<string> {
   const agora = new Date().toISOString();
   const ref = await addDoc(collection(db, 'produtos'), {
     ...dados,
+    ordem: await proximaOrdem(dados.cicloId),
     criadoEm: agora,
     atualizadoEm: agora,
   });
   return ref.id;
+}
+
+/**
+ * Grava a lista inteira renumerada de 1 em diante, escrevendo só o que saiu
+ * do lugar. Renumerar em vez de trocar dois valores é o que impede o empate
+ * de voltar: depois de qualquer movimento a sequência é densa e sem repetição.
+ *
+ * Um lote basta — o catálogo de um ciclo tem dezenas de soluções, longe do
+ * teto de 500 operações do Firestore.
+ */
+export async function reordenarProdutos(produtosNaOrdem: readonly Produto[]): Promise<void> {
+  const mudados = produtosNaOrdem
+    .map((p, i) => ({ p, ordem: i + 1 }))
+    .filter(({ p, ordem }) => p.ordem !== ordem);
+  if (mudados.length === 0) return;
+
+  const agora = new Date().toISOString();
+  const lote = writeBatch(db);
+  for (const { p, ordem } of mudados) {
+    lote.update(doc(db, 'produtos', p.id), { ordem, atualizadoEm: agora });
+  }
+  await lote.commit();
 }
 
 export async function atualizarProduto(id: string, dados: Partial<DadosProduto>): Promise<void> {
@@ -316,6 +359,9 @@ export async function duplicarProduto(id: string): Promise<string> {
     ...dados,
     nome: `${original.nome} (cópia)`,
     visibilidade: 'rascunho',
+    // No fim da fila, não empatada com o original: quem duplicou decide onde
+    // ela fica, subindo ou descendo na lista.
+    ordem: await proximaOrdem(original.cicloId),
     criadoEm: agora,
     atualizadoEm: agora,
   });

@@ -58,7 +58,6 @@ interface Rascunho {
   valorTexto: string;
   meses: string;
   minimoAlunos: string;
-  ordem: string;
   visibilidade: Visibilidade;
   precoSocialHabilitado: boolean;
   baseSocial: BasePreco;
@@ -79,7 +78,6 @@ const VAZIO: Rascunho = {
   valorTexto: '',
   meses: '10',
   minimoAlunos: '',
-  ordem: '10',
   visibilidade: 'rascunho',
   precoSocialHabilitado: false,
   baseSocial: 'aluno',
@@ -228,7 +226,6 @@ export function SolucaoForm() {
           minimoAlunos: produto.precificacao.minimoAlunos
             ? String(produto.precificacao.minimoAlunos)
             : '',
-          ordem: String(produto.ordem),
           visibilidade: produto.visibilidade,
           precoSocialHabilitado: produto.precoSocialHabilitado ?? false,
           baseSocial: social?.base ?? produto.precificacao.base,
@@ -332,7 +329,6 @@ export function SolucaoForm() {
         },
         precoSocialHabilitado: rascunho.precoSocialHabilitado,
         ...(precificacaoSocial ? { precificacaoSocial } : {}),
-        ordem: Number(rascunho.ordem) || 0,
         visibilidade: rascunho.visibilidade,
       };
 
@@ -461,14 +457,6 @@ export function SolucaoForm() {
               </option>
             ))}
           </Selecao>
-        </Campo>
-
-        <Campo rotulo="Ordem na escolha" dica="Menor aparece primeiro.">
-          <Entrada
-            type="number"
-            value={rascunho.ordem}
-            onChange={(e) => setRascunho({ ...rascunho, ordem: e.target.value })}
-          />
         </Campo>
       </div>
 
