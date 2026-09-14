@@ -119,6 +119,56 @@ export async function atualizarUnidade(
   await updateDoc(doc(db, 'unidades', id), { ...dados });
 }
 
+/**
+ * O que se apoia numa unidade. Existe porque apagar o cadastro não apaga o
+ * que aponta pra ele: o que sobra vira referência pendurada num documento
+ * que não existe mais, e isso não aparece em lugar nenhum até alguém abrir
+ * a tela errada.
+ */
+export interface VinculosUnidade {
+  /** Pedidos de qualquer estado. Impede a exclusão. */
+  pedidos: number;
+  /** Gestores com vínculo nesta unidade. Não impede, mas precisa ser dito. */
+  gestores: number;
+  /** Previsões de alunos. Saem junto com a unidade. */
+  previsoes: number;
+}
+
+export async function vinculosDaUnidade(unidadeId: string): Promise<VinculosUnidade> {
+  const [pedidos, gestores, previsoes] = await Promise.all([
+    contar('pedidos', ['unidadeId', unidadeId]),
+    contar('usuarios', ['unidadeId', unidadeId]),
+    contar('matriculas', ['unidadeId', unidadeId]),
+  ]);
+  return { pedidos, gestores, previsoes };
+}
+
+/**
+ * Apaga a unidade e a previsão de alunos que ela tiver — a previsão só faz
+ * sentido junto da unidade, e as regras do Firestore deixam o admin apagá-la.
+ *
+ * Pedido não: as regras negam `delete` em `pedidos` pra todo mundo, inclusive
+ * pro admin, porque pedido é dinheiro com trilha de auditoria. Por isso uma
+ * unidade que já tem pedido não pode ser apagada — apagá-la deixaria o pedido
+ * órfão na fila da regional, sem nome de unidade pra abrir. A tela já barra
+ * antes de chegar aqui; a conferência se repete no momento do apagar porque
+ * entre abrir o diálogo e confirmar o gestor pode ter aberto o rascunho dele.
+ */
+export async function excluirUnidade(id: string): Promise<void> {
+  const { pedidos } = await vinculosDaUnidade(id);
+  if (pedidos > 0) {
+    throw new Error('Esta unidade passou a ter pedido enquanto o aviso estava aberto.');
+  }
+
+  const previsoes = await getDocs(
+    query(collection(db, 'matriculas'), where('unidadeId', '==', id)),
+  );
+  const lote = writeBatch(db);
+  previsoes.docs.forEach((d) => lote.delete(d.ref));
+  lote.delete(doc(db, 'unidades', id));
+  await lote.commit();
+}
+
 export interface UnidadeParaImportar {
   nome: string;
   codigo: string;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal } from '@/componentes/Modal';
+import { DialogoConfirmacao, Modal } from '@/componentes/Modal';
 import {
   AreaTexto,
   Botao,
@@ -16,9 +16,12 @@ import {
   atualizarUnidade,
   criarUnidade,
   criarUnidadesEmLote,
+  excluirUnidade,
   listarRegionais,
   listarUnidades,
+  vinculosDaUnidade,
 } from '@/lib/dados';
+import type { VinculosUnidade } from '@/lib/dados';
 import { analisarColagem, type ResultadoImportacao } from '@/lib/importarUnidades';
 import type { Mantenedora, Regional, TipoUnidade, Unidade } from '@dominio/tipos';
 
@@ -41,6 +44,15 @@ export function Unidades() {
   const [regionalId, setRegionalId] = useState('');
   const [tipo, setTipo] = useState<TipoUnidade>('paga');
   const [mantenedora, setMantenedora] = useState<Mantenedora | ''>('');
+
+  // A exclusão só abre depois de saber o que depende da unidade: um diálogo
+  // que aparece vazio e depois se preenche faz a pessoa ler duas vezes.
+  const [conferindo, setConferindo] = useState<string | null>(null);
+  const [excluindo, setExcluindo] = useState<{
+    unidade: Unidade;
+    vinculos: VinculosUnidade;
+  } | null>(null);
+  const [apagando, setApagando] = useState(false);
 
   const [importarAberto, setImportarAberto] = useState(false);
   const [colado, setColado] = useState('');
@@ -139,6 +151,38 @@ export function Unidades() {
       setSalvando(false);
     }
   }
+
+  async function pedirExclusao(u: Unidade) {
+    setErro(null);
+    setConferindo(u.id);
+    try {
+      setExcluindo({ unidade: u, vinculos: await vinculosDaUnidade(u.id) });
+    } catch {
+      setErro('Não foi possível conferir o que depende desta unidade. Tente de novo.');
+    } finally {
+      setConferindo(null);
+    }
+  }
+
+  async function confirmarExclusao() {
+    if (!excluindo) return;
+    const alvo = excluindo.unidade;
+    setApagando(true);
+    setErro(null);
+    try {
+      await excluirUnidade(alvo.id);
+      setExcluindo(null);
+      await carregar();
+    } catch (e) {
+      setExcluindo(null);
+      setErro((e as Error).message || 'Não foi possível excluir a unidade.');
+    } finally {
+      setApagando(false);
+    }
+  }
+
+  // Pedido trava a exclusão; gestor vinculado só avisa.
+  const travada = !!excluindo && excluindo.vinculos.pedidos > 0;
 
   if (carregando) return <EsqueletoLinhas linhas={4} />;
 
@@ -240,13 +284,26 @@ export function Unidades() {
                   {u.mantenedora ? ` · ${u.mantenedora}` : ''}
                 </span>
                 <span className="font-mono text-xs text-gray-400">{u.codigo}</span>
-                <button
-                  type="button"
-                  onClick={() => abrirEdicao(u)}
-                  className="mt-1 w-fit text-xs text-brand-medium hover:underline"
-                >
-                  Editar
-                </button>
+                <div className="mt-1 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => abrirEdicao(u)}
+                    className="text-xs text-brand-medium hover:underline"
+                  >
+                    Editar
+                  </button>
+                  {/* Destrutiva depois da ação de rotina, e sem cor de alerta
+                      em repouso: um cartão de unidade não precisa ficar
+                      vermelho o tempo todo por causa do que ele permite. */}
+                  <button
+                    type="button"
+                    onClick={() => void pedirExclusao(u)}
+                    disabled={conferindo !== null}
+                    className="text-xs text-gray-500 hover:text-red-700 hover:underline disabled:opacity-50"
+                  >
+                    {conferindo === u.id ? 'Conferindo…' : 'Excluir'}
+                  </button>
+                </div>
               </Cartao>
             ))}
           </div>
@@ -436,6 +493,69 @@ export function Unidades() {
           </p>
         )}
       </Modal>
+
+      {/* Travada: não há o que confirmar, só o que explicar. Um diálogo de
+          confirmação com o botão desligado faria a pessoa procurar o que
+          digitar pra liberar — e não há nada que libere. */}
+      <Modal
+        aberto={travada}
+        aoFechar={() => setExcluindo(null)}
+        titulo="Esta unidade não pode ser excluída"
+        descricao="Ela já tem pedido registrado neste ou em outro ciclo."
+        rodape={<Botao onClick={() => setExcluindo(null)}>Entendi</Botao>}
+      >
+        {excluindo && (
+          <div className="flex flex-col gap-3 text-sm text-gray-600">
+            <p>
+              <strong>{excluindo.unidade.nome}</strong> tem {excluindo.vinculos.pedidos} pedido
+              {excluindo.vinculos.pedidos === 1 ? '' : 's'}. Pedido guarda o preço congelado e a
+              trilha de quem aprovou o quê — apagar a unidade deixaria esse histórico pendurado
+              num cadastro que não existe mais, sem nome pra abrir na fila da regional.
+            </p>
+            <p>
+              Se a unidade saiu da rede, o caminho é mudar o vínculo dos gestores dela e deixar o
+              cadastro parado: o pedido continua auditável, e ninguém novo entra por ele.
+            </p>
+          </div>
+        )}
+      </Modal>
+
+      <DialogoConfirmacao
+        aberto={!!excluindo && !travada}
+        nivel="perigo"
+        titulo="Excluir unidade"
+        descricao="O cadastro sai da lista e a previsão de alunos dela vai junto."
+        detalhe={
+          excluindo && (
+            <div className="flex flex-col gap-1">
+              <span>
+                <strong>{excluindo.unidade.nome}</strong> ·{' '}
+                {nomeRegional(excluindo.unidade.regionalId)}
+              </span>
+              <span className="font-mono text-xs">{excluindo.unidade.codigo}</span>
+              {excluindo.vinculos.previsoes > 0 && (
+                <span className="text-xs">
+                  {excluindo.vinculos.previsoes} previsão(ões) de alunos serão apagadas junto.
+                </span>
+              )}
+              {/* O gestor não some com a unidade: o vínculo dele fica apontando
+                  pra um cadastro que não existe, e ele trava na própria tela
+                  sem entender por quê. Quem apaga precisa saber disso antes. */}
+              {excluindo.vinculos.gestores > 0 && (
+                <span className="text-xs text-amber-700">
+                  {excluindo.vinculos.gestores} gestor(es) têm vínculo com esta unidade e vão
+                  ficar sem acesso. Redefina o vínculo deles na aba Usuários depois.
+                </span>
+              )}
+            </div>
+          )
+        }
+        textoConfirmar="Excluir unidade"
+        nomeParaDigitar={excluindo?.unidade.nome}
+        carregando={apagando}
+        aoCancelar={() => setExcluindo(null)}
+        aoConfirmar={() => void confirmarExclusao()}
+      />
     </div>
   );
 }

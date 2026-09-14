@@ -116,6 +116,7 @@ export function DialogoConfirmacao({
   descricao,
   detalhe,
   textoConfirmar,
+  textoCiencia,
   nomeParaDigitar,
   carregando,
   aoConfirmar,
@@ -128,6 +129,12 @@ export function DialogoConfirmacao({
   /** Resumo do que vai acontecer: números, contagens, o que muda. */
   detalhe?: ReactNode;
   textoConfirmar: string;
+  /**
+   * O que a pessoa marca antes de poder confirmar. O padrão serve pra quase
+   * tudo — quem chama só troca quando a ação tem uma consequência própria
+   * que o padrão não diz.
+   */
+  textoCiencia?: ReactNode;
   /** Exigido no nível `perigo`: o texto que a pessoa precisa digitar. */
   nomeParaDigitar?: string;
   carregando?: boolean;
@@ -183,10 +190,7 @@ export function DialogoConfirmacao({
             onChange={(e) => setCiente(e.target.checked)}
             className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-[var(--color-brand-medium)]"
           />
-          <span>
-            Estou ciente de que os valores são estimativas, calculadas sobre a previsão de alunos
-            informada, e podem mudar com a matrícula efetiva.
-          </span>
+          <span>{textoCiencia ?? 'Estou ciente de que esta ação não se desfaz.'}</span>
         </label>
       )}
 
