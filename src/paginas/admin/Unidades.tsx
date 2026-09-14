@@ -8,6 +8,8 @@ import {
   Entrada,
   EsqueletoLinhas,
   EstadoVazio,
+  IconeEditar,
+  IconeExcluir,
   Selecao,
   Selo,
 } from '@/componentes/ui';
@@ -284,25 +286,31 @@ export function Unidades() {
                   {u.mantenedora ? ` · ${u.mantenedora}` : ''}
                 </span>
                 <span className="font-mono text-xs text-gray-400">{u.codigo}</span>
-                <div className="mt-1 flex items-center gap-3">
-                  <button
-                    type="button"
+                {/* Ícone só, com aria-label: o nome da unidade já está no
+                    cartão, e repetir "Editar Colégio X" em cada um enche a
+                    grade de texto que ninguém lê. Destrutiva depois da ação
+                    de rotina — não é o botão que a mão encontra primeiro. */}
+                <div className="mt-1 flex items-center gap-1">
+                  <Botao
+                    variante="secundario"
+                    tamanho="icone"
+                    aria-label={`Editar ${u.nome}`}
+                    title="Editar"
                     onClick={() => abrirEdicao(u)}
-                    className="text-xs text-brand-medium hover:underline"
                   >
-                    Editar
-                  </button>
-                  {/* Destrutiva depois da ação de rotina, e sem cor de alerta
-                      em repouso: um cartão de unidade não precisa ficar
-                      vermelho o tempo todo por causa do que ele permite. */}
-                  <button
-                    type="button"
-                    onClick={() => void pedirExclusao(u)}
+                    <IconeEditar />
+                  </Botao>
+                  <Botao
+                    variante="fantasma"
+                    tamanho="icone"
+                    aria-label={`Excluir ${u.nome}`}
+                    title="Excluir"
+                    carregando={conferindo === u.id}
                     disabled={conferindo !== null}
-                    className="text-xs text-gray-500 hover:text-red-700 hover:underline disabled:opacity-50"
+                    onClick={() => void pedirExclusao(u)}
                   >
-                    {conferindo === u.id ? 'Conferindo…' : 'Excluir'}
-                  </button>
+                    <IconeExcluir />
+                  </Botao>
                 </div>
               </Cartao>
             ))}
@@ -551,7 +559,6 @@ export function Unidades() {
           )
         }
         textoConfirmar="Excluir unidade"
-        nomeParaDigitar={excluindo?.unidade.nome}
         carregando={apagando}
         aoCancelar={() => setExcluindo(null)}
         aoConfirmar={() => void confirmarExclusao()}

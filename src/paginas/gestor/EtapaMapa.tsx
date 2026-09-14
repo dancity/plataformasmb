@@ -181,7 +181,7 @@ export function EtapaMapa({
         }
         textoConfirmar="Enviar pedido"
         textoCiencia="Estou ciente de que os valores são estimativas, calculadas sobre a previsão de alunos informada, e podem mudar com a matrícula efetiva."
-        nomeParaDigitar={ctx.unidade.nome}
+        textoParaDigitar="Estou ciente"
         carregando={enviando}
         aoCancelar={() => setConfirmando(false)}
         aoConfirmar={() => void enviar()}

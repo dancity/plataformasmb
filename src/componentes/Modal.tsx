@@ -117,7 +117,7 @@ export function DialogoConfirmacao({
   detalhe,
   textoConfirmar,
   textoCiencia,
-  nomeParaDigitar,
+  textoParaDigitar,
   carregando,
   aoConfirmar,
   aoCancelar,
@@ -135,8 +135,13 @@ export function DialogoConfirmacao({
    * que o padrão não diz.
    */
   textoCiencia?: ReactNode;
-  /** Exigido no nível `perigo`: o texto que a pessoa precisa digitar. */
-  nomeParaDigitar?: string;
+  /**
+   * Opcional, e só vale no nível `perigo`: o texto que a pessoa precisa
+   * digitar antes de confirmar. Nem sempre é um nome — quando a ação não
+   * aponta pra um registro específico, uma frase como "Estou ciente" diz
+   * mais do que repetir um rótulo.
+   */
+  textoParaDigitar?: string;
   carregando?: boolean;
   aoConfirmar: () => void;
   aoCancelar: () => void;
@@ -151,8 +156,8 @@ export function DialogoConfirmacao({
     }
   }, [aberto]);
 
-  const exigeDigitar = nivel === 'perigo' && !!nomeParaDigitar;
-  const nomeConfere = !exigeDigitar || digitado.trim() === nomeParaDigitar?.trim();
+  const exigeDigitar = nivel === 'perigo' && !!textoParaDigitar;
+  const nomeConfere = !exigeDigitar || digitado.trim() === textoParaDigitar?.trim();
   const exigeCiencia = nivel !== 'simples';
   const liberado = nomeConfere && (!exigeCiencia || ciente);
 
@@ -196,13 +201,13 @@ export function DialogoConfirmacao({
 
       {exigeDigitar && (
         <Campo
-          rotulo={`Digite ${nomeParaDigitar} para confirmar`}
+          rotulo={`Digite “${textoParaDigitar}” para confirmar`}
           dica="A digitação existe para evitar clique acidental em algo que não se desfaz."
         >
           <Entrada
             value={digitado}
             onChange={(e) => setDigitado(e.target.value)}
-            placeholder={nomeParaDigitar}
+            placeholder={textoParaDigitar}
             autoComplete="off"
           />
         </Campo>
