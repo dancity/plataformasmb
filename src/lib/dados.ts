@@ -449,7 +449,7 @@ export async function excluirTodosProdutos(cicloId: string): Promise<number> {
  * velho. Um modelo migrado assim nasce marcado em todos os anos em cada
  * avaliação; abrir pra editar e ajustar é o caminho normal a partir daí.
  */
-function paraModelo(id: string, data: Record<string, unknown>): Modelo {
+export function paraModelo(id: string, data: Record<string, unknown>): Modelo {
   const bruto = data as Omit<Modelo, 'id' | 'itens'> & {
     itens?: ItemModelo[];
     produtoIds?: string[];

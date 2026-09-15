@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { DialogoConfirmacao, Modal } from '@/componentes/Modal';
 import { Botao, Cartao, EstadoVazio, Selo, juntar } from '@/componentes/ui';
 import type { Sessao } from '@/lib/auth';
-import { listarModelosPublicados } from '@/lib/dados';
-import { calcularLinhas, computarItem, resolverItensDoModelo, somarTotais } from '@/lib/pedido';
+import {
+  calcularLinhas,
+  computarItem,
+  estadoDaContratacao,
+  resolverItensDoModelo,
+  somarTotais,
+} from '@/lib/pedido';
 import type { ContextoPedido, EscritorPedido, ItemParaAplicar } from '@/lib/pedido';
 import { anosEfetivos } from '@dominio/habilitacao';
 import { anoEscolar, anosOfertados, descreverAnos } from '@dominio/anosEscolares';
@@ -49,8 +54,7 @@ export function EtapaModelo({
 
   const colunas = useMemo(() => anosOfertados(ctx.previsao), [ctx.previsao]);
 
-  const [modelos, setModelos] = useState<Modelo[]>([]);
-  const [carregandoModelos, setCarregandoModelos] = useState(true);
+  const modelos = ctx.modelos;
   const [modeloVisualizando, setModeloVisualizando] = useState<Modelo | null>(null);
   const [modeloEscolhido, setModeloEscolhido] = useState<Modelo | null>(null);
   const [aplicandoModelo, setAplicandoModelo] = useState(false);
@@ -59,13 +63,6 @@ export function EtapaModelo({
     null,
   );
   const [removendoModelo, setRemovendoModelo] = useState(false);
-
-  useEffect(() => {
-    listarModelosPublicados(ctx.ciclo.id)
-      .then(setModelos)
-      .catch(() => setModelos([]))
-      .finally(() => setCarregandoModelos(false));
-  }, [ctx.ciclo.id]);
 
   const totalAdotado = useMemo(
     () => somarTotais(linhasLargaEscala).total,
@@ -145,6 +142,24 @@ export function EtapaModelo({
     }
   }, [modeloEscolhido, resolucaoEscolhido, escritor, ctx, sessao, aoSalvar]);
 
+  /**
+   * Soluções cujo pré-requisito é este modelo e que nenhum outro modelo
+   * adotado sustenta. São as que ficam travadas se ele sair.
+   */
+  const dependemDesteModelo = useCallback(
+    (modeloId: string) => {
+      const restantes = new Set(
+        [...estadoDaContratacao(ctx).modelosAdotados].filter((id) => id !== modeloId),
+      );
+      return ctx.produtos.filter((p) => {
+        const exige = p.requer?.modelos ?? [];
+        if (!exige.includes(modeloId)) return false;
+        return !exige.some((id) => restantes.has(id));
+      });
+    },
+    [ctx],
+  );
+
   const removerModeloEscolhido = useCallback(async () => {
     if (!modeloParaRemover || !ctx.pedido) return;
     const produtoIds = produtosDoModelo(modeloParaRemover.id);
@@ -182,7 +197,7 @@ export function EtapaModelo({
         </p>
       )}
 
-      {carregandoModelos ? null : modelos.length === 0 ? (
+      {modelos.length === 0 ? (
         <EstadoVazio
           icone={<span aria-hidden="true">📐</span>}
           titulo="Nenhum modelo disponível"
@@ -375,15 +390,30 @@ export function EtapaModelo({
         descricao="As avaliações que vieram deste modelo voltam a ficar sem decisão — inclusive as obrigatórias, que só recalculam o valor quando alguém adotar outro modelo ou o pedido for enviado. Depois de remover, você pode adotar outro modelo."
         detalhe={
           modeloParaRemover && (
-            <div className="flex flex-col gap-1">
-              <span className="font-medium text-gray-700">Ficam sem decisão:</span>
-              <ul className="flex flex-col gap-0.5">
-                {produtosDoModelo(modeloParaRemover.id).map((produtoId) => (
-                  <li key={produtoId}>
-                    {linhas.find((l) => l.produto.id === produtoId)?.produto.nome ?? produtoId}
-                  </li>
-                ))}
-              </ul>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <span className="font-medium text-gray-700">Ficam sem decisão:</span>
+                <ul className="flex flex-col gap-0.5">
+                  {produtosDoModelo(modeloParaRemover.id).map((produtoId) => (
+                    <li key={produtoId}>
+                      {linhas.find((l) => l.produto.id === produtoId)?.produto.nome ?? produtoId}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {/* Solução que só existe por causa deste modelo cai junto. Sem
+                  este aviso ela sumiria da etapa 3 sem nenhuma relação
+                  visível com o botão que acabou de ser clicado. */}
+              {dependemDesteModelo(modeloParaRemover.id).length > 0 && (
+                <div className="flex flex-col gap-1 text-amber-700">
+                  <span className="font-medium">Também deixam de ficar disponíveis:</span>
+                  <ul className="flex flex-col gap-0.5">
+                    {dependemDesteModelo(modeloParaRemover.id).map((p) => (
+                      <li key={p.id}>{p.nome}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )
         }

@@ -6,11 +6,15 @@ import {
   atualizarProduto,
   criarProduto,
   listarFornecedores,
+  listarModelos,
+  listarProdutos,
   obterProduto,
 } from '@/lib/dados';
 import type {
   BasePreco,
   HabilitacaoPorAno,
+  Modelo,
+  Produto,
   CicloCobranca,
   Fornecedor,
   Precificacao,
@@ -169,6 +173,50 @@ function CamposPreco({
   );
 }
 
+/** Lista de caixas de marcar, para escolher entre poucos itens conhecidos. */
+function ListaDeMarcar({
+  titulo,
+  vazio,
+  itens,
+  marcados,
+  aoMudar,
+}: {
+  titulo: string;
+  vazio: string;
+  itens: readonly { id: string; nome: string }[];
+  marcados: readonly string[];
+  aoMudar: (ids: string[]) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-medium tracking-wide text-gray-500 uppercase">{titulo}</span>
+      {itens.length === 0 ? (
+        <span className="text-sm text-gray-400">{vazio}</span>
+      ) : (
+        <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+          {itens.map((i) => (
+            <label key={i.id} className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={marcados.includes(i.id)}
+                onChange={(e) =>
+                  aoMudar(
+                    e.target.checked
+                      ? [...marcados, i.id]
+                      : marcados.filter((id) => id !== i.id),
+                  )
+                }
+                className="h-4 w-4 accent-[var(--color-brand-medium)]"
+              />
+              {i.nome}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SolucaoForm() {
   const { ciclo } = useAdmin();
   const navegar = useNavigate();
@@ -179,6 +227,11 @@ export function SolucaoForm() {
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [rascunho, setRascunho] = useState<Rascunho>(VAZIO);
   const [habilitacao, setHabilitacao] = useState<HabilitacaoPorAno>({});
+  // Pré-requisito: ids marcados, de modelos e de outras soluções.
+  const [requerModelos, setRequerModelos] = useState<string[]>([]);
+  const [requerProdutos, setRequerProdutos] = useState<string[]>([]);
+  const [modelos, setModelos] = useState<Modelo[]>([]);
+  const [outrosProdutos, setOutrosProdutos] = useState<Produto[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [naoEncontrada, setNaoEncontrada] = useState(false);
@@ -189,7 +242,15 @@ export function SolucaoForm() {
       return;
     }
     try {
-      setFornecedores(await listarFornecedores());
+      const [fs, ms, ps] = await Promise.all([
+        listarFornecedores(),
+        listarModelos(ciclo.id),
+        listarProdutos(ciclo.id),
+      ]);
+      setFornecedores(fs);
+      setModelos(ms);
+      // Uma solução não pode exigir a si mesma.
+      setOutrosProdutos(ps.filter((p) => p.id !== produtoId));
 
       if (produtoId) {
         const produto = await obterProduto(produtoId);
@@ -198,6 +259,8 @@ export function SolucaoForm() {
           return;
         }
         setHabilitacao(produto.habilitacao ?? {});
+        setRequerModelos(produto.requer?.modelos ?? []);
+        setRequerProdutos(produto.requer?.produtos ?? []);
         const social = produto.precificacaoSocial;
         setRascunho({
           nome: produto.nome,
@@ -317,6 +380,17 @@ export function SolucaoForm() {
         ...(precificacaoSocial ? { precificacaoSocial } : {}),
         visibilidade: rascunho.visibilidade,
         habilitacao,
+        // Sem nada marcado o campo não vai pro documento: exigência vazia e
+        // ausência de exigência são a mesma coisa, e gravar `{}` só deixaria
+        // lixo que outra leitura teria que saber ignorar.
+        ...(requerModelos.length > 0 || requerProdutos.length > 0
+          ? {
+              requer: {
+                ...(requerModelos.length > 0 ? { modelos: requerModelos } : {}),
+                ...(requerProdutos.length > 0 ? { produtos: requerProdutos } : {}),
+              },
+            }
+          : {}),
       };
 
       if (editando) await atualizarProduto(produtoId!, dados);
@@ -538,6 +612,37 @@ export function SolucaoForm() {
       <fieldset className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4">
         <legend className="px-1 text-sm font-medium text-gray-700">Onde pode ser contratada</legend>
         <HabilitacaoAnos habilitacao={habilitacao} aoMudar={setHabilitacao} />
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4">
+        <legend className="px-1 text-sm font-medium text-gray-700">Pré-requisito</legend>
+        <p className="max-w-prose text-sm text-gray-500">
+          Marque aqui se esta solução só pode ser contratada por quem já levou outra coisa. Basta
+          a unidade ter <strong>um</strong> dos itens marcados — não todos. Sem nada marcado, ela
+          fica livre, que é o caso da maioria.
+        </p>
+
+        <ListaDeMarcar
+          titulo="Modelos"
+          vazio="Nenhum modelo cadastrado neste ciclo."
+          itens={modelos.map((m) => ({ id: m.id, nome: m.nome }))}
+          marcados={requerModelos}
+          aoMudar={setRequerModelos}
+        />
+        <ListaDeMarcar
+          titulo="Outras soluções"
+          vazio="Nenhuma outra solução cadastrada neste ciclo."
+          itens={outrosProdutos.map((p) => ({ id: p.id, nome: p.nome }))}
+          marcados={requerProdutos}
+          aoMudar={setRequerProdutos}
+        />
+
+        {(requerModelos.length > 0 || requerProdutos.length > 0) && (
+          <p className="rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-700">
+            O gestor vai ver esta solução na lista, travada, com o motivo — e ela não vai segurar
+            o envio do pedido dele.
+          </p>
+        )}
       </fieldset>
 
       <Campo

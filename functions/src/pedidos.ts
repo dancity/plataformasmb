@@ -3,6 +3,8 @@ import type { AnoEscolarId, PrevisaoPorAno } from '../../dominio/anosEscolares';
 import { aplicarLicencas } from '../../dominio/anosEscolares';
 import { calcularItem } from '../../dominio/preco';
 import { anosEfetivos, resolverHabilitacao } from '../../dominio/habilitacao';
+import { bloqueioDe } from '../../dominio/vinculos';
+import type { EstadoContratacao } from '../../dominio/vinculos';
 import type {
   Ciclo,
   EventoPedido,
@@ -188,6 +190,18 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
     });
   }
 
+  // Pré-requisito é avaliado sobre o que a unidade de fato levou. O cliente
+  // trava a tela, mas quem garante é aqui: item de solução travada é apagado,
+  // não importa como tenha entrado.
+  const modelosAdotados = new Set<string>();
+  const produtosContratados = new Set<string>();
+  for (const [produtoId, escolha] of escolhas) {
+    if (escolha.recusado || escolha.anos.length === 0) continue;
+    produtosContratados.add(produtoId);
+    if (escolha.origemModeloId) modelosAdotados.add(escolha.origemModeloId);
+  }
+  const estado: EstadoContratacao = { modelosAdotados, produtosContratados };
+
   const lote = db.batch();
   const totais: TotaisPedido = { obrigatorio: 0, opcional: 0, total: 0 };
   const pendentes: string[] = [];
@@ -195,6 +209,13 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   for (const produto of produtos) {
     const hab = resolverHabilitacao(produto, previsao, unidadeSocial);
     if (!hab.disponivel) continue;
+
+    // Travada: some do pedido e não vira pendência — não se cobra decisão de
+    // quem não pode decidir.
+    if (bloqueioDe(produto, estado)) {
+      lote.delete(pedidoRef.collection('itens').doc(produto.id));
+      continue;
+    }
 
     const escolha = escolhas.get(produto.id);
     const decidiu = !!escolha && (escolha.recusado || escolha.anos.length > 0);

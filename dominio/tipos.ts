@@ -179,6 +179,17 @@ export interface Produto {
    */
   habilitacao: HabilitacaoPorAno;
   /**
+   * Pré-requisito comercial: a unidade só contrata esta solução se já tiver
+   * levado ALGUM dos itens listados — é "ou", não "e". Ausente significa sem
+   * exigência, que é o caso da maioria.
+   *
+   * Existe porque há solução que só é vendida como complemento de um pacote
+   * (o Evo Jornada, que pressupõe o Modelo B ou o C). Sem isso, a unidade
+   * montaria um pedido que o fornecedor não aceita, e ninguém descobriria
+   * antes da fila da regional.
+   */
+  requer?: Prerequisito;
+  /**
    * Ordem na etapa de escolha, em sequência normalizada (1, 2, 3…). Quem
    * define é o botão de subir/descer na tela de Soluções, não um número
    * digitado no cadastro: ordem é uma relação entre as soluções, e digitar
@@ -194,9 +205,9 @@ export interface Produto {
 /**
  * Uma solução do pacote e em quais anos escolares ela entra — escolhido pelo
  * admin no cadastro, não inferido da habilitação. Na hora de aplicar, esses
- * anos ainda passam pelo crivo da regional do gestor (`anosEfetivos`): ano
- * escolhido aqui que a regional não habilita pra este produto simplesmente
- * não entra, e obrigatório da regional entra de qualquer forma.
+ * anos ainda passam pelo crivo de `anosEfetivos`: ano escolhido aqui que o
+ * catálogo não habilita pro produto simplesmente não entra, e ano obrigatório
+ * entra de qualquer forma.
  */
 export interface ItemModelo {
   produtoId: string;
@@ -241,6 +252,18 @@ export type Obrigatoriedade = 'indisponivel' | 'opcional' | 'obrigatorio';
 export type HabilitacaoPorAno = Partial<
   Record<AnoEscolarId, Exclude<Obrigatoriedade, 'indisponivel'>>
 >;
+
+/**
+ * O que precisa estar contratado para uma solução ficar liberada. Basta UM
+ * item de qualquer uma das listas — modelo e solução ficam juntos porque a
+ * pergunta é a mesma: "a unidade já levou alguma dessas coisas?".
+ */
+export interface Prerequisito {
+  /** Ids de modelos; adotar qualquer um libera. */
+  modelos?: string[];
+  /** Ids de produtos; contratar qualquer um libera. */
+  produtos?: string[];
+}
 
 // ─── Previsão de alunos ──────────────────────────────────────────
 
