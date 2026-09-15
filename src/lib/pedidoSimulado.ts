@@ -96,7 +96,7 @@ export function criarEscritorSimulado(
       let totais: Totais = { obrigatorio: 0, opcional: 0, total: 0 };
       setCtx((c) => {
         if (!c || !c.pedido) return c;
-        totais = somarTotais(calcularLinhas(c, c.pedido.regionalId));
+        totais = somarTotais(calcularLinhas(c));
         return {
           ...c,
           pedido: { ...c.pedido, estado: 'enviado', totais, atualizadoEm: new Date().toISOString() },

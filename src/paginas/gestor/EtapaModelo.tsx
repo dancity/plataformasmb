@@ -38,7 +38,7 @@ export function EtapaModelo({
   aoSalvar: () => Promise<void>;
 }) {
   const linhas = useMemo(
-    () => calcularLinhas(ctx, sessao.regionalId ?? ''),
+    () => calcularLinhas(ctx),
     [ctx, sessao.regionalId],
   );
 

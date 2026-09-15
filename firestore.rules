@@ -86,25 +86,11 @@ service cloud.firestore {
     }
 
     match /produtos/{produtoId} {
-      // O filtro do que cada regional vê é feito pelas regras de
-      // habilitação, não escondendo o catálogo: preço e descrição não
-      // são segredo dentro da rede.
+      // O catálogo inteiro é legível por quem tem papel: preço e descrição
+      // não são segredo dentro da rede, e a habilitação por ano escolar
+      // mora no próprio documento.
       allow read: if papelConhecido();
       allow write: if ehAdmin();
-
-      match /regras/{regraId} {
-        allow read: if papelConhecido();
-        allow write: if ehAdmin();
-      }
-    }
-
-    // Consulta por collectionGroup (resolver a habilitação de todas as
-    // soluções de uma vez, sem uma leitura por produto): a regra aninhada
-    // acima cobre a subcoleção sob um produto específico, mas o Firestore
-    // não estende regra aninhada para collectionGroup — precisa desta,
-    // à parte, com o caminho em curinga.
-    match /{caminho=**}/regras/{regraId} {
-      allow read: if papelConhecido();
     }
 
     // ── Previsão de alunos ────────────────────────────────────────

@@ -1,15 +1,18 @@
 import type { AnoEscolarId, PrevisaoPorAno } from './anosEscolares';
 import { ordenarAnos } from './anosEscolares';
-import type { Precificacao, Produto, RegraHabilitacao } from './tipos';
+import type { Precificacao, Produto } from './tipos';
 
 /**
  * Resolve o que uma unidade específica pode contratar de uma solução.
  *
  * Três estados por ano escolar, e a diferença entre eles é a informação mais
  * importante da tela de escolha:
- *   indisponível — não é oferecido nesta regional (mostra explicação, não caixa)
+ *   indisponível — não é oferecido, ou a unidade não oferta a série
  *   opcional     — o gestor decide
  *   obrigatório  — já vem marcado e travado
+ *
+ * O que é oferecido é nacional (`produto.habilitacao`); o que sobra depois de
+ * cruzar com a previsão de alunos é que varia de unidade para unidade.
  */
 export interface HabilitacaoResolvida {
   produtoId: string;
@@ -17,42 +20,33 @@ export interface HabilitacaoResolvida {
   opcionais: AnoEscolarId[];
   /** Anos que entram no pedido de qualquer forma. */
   obrigatorios: AnoEscolarId[];
-  /** Preço vigente para esta regional (override da regra, se houver). */
+  /** Preço vigente para esta unidade (social substitui o normal). */
   preco: Precificacao;
-  /** Falso quando nenhuma regra alcança os anos ofertados pela unidade. */
+  /** Falso quando nenhum ano oferecido coincide com o que a unidade oferta. */
   disponivel: boolean;
 }
 
 export function resolverHabilitacao(
   produto: Produto,
-  regras: readonly RegraHabilitacao[],
-  regionalId: string,
   previsao: PrevisaoPorAno,
   unidadeSocial = false,
 ): HabilitacaoResolvida {
   const opcionais: AnoEscolarId[] = [];
   const obrigatorios: AnoEscolarId[] = [];
-  let preco = produto.precificacao;
 
-  for (const regra of regras) {
-    if (regra.produtoId !== produto.id) continue;
-    if (regra.regionalId !== regionalId) continue;
+  for (const [ano, estado] of Object.entries(produto.habilitacao ?? {})) {
     // Série que a unidade não vai ofertar não aparece na escolha.
-    if ((previsao[regra.anoEscolar] ?? 0) <= 0) continue;
-
-    if (regra.obrigatoriedade === 'obrigatorio') obrigatorios.push(regra.anoEscolar);
-    else opcionais.push(regra.anoEscolar);
-
-    // O override é por regional; a primeira regra da regional já o define.
-    if (regra.precoOverride) preco = regra.precoOverride;
+    if ((previsao[ano as AnoEscolarId] ?? 0) <= 0) continue;
+    if (estado === 'obrigatorio') obrigatorios.push(ano as AnoEscolarId);
+    else if (estado === 'opcional') opcionais.push(ano as AnoEscolarId);
   }
 
-  // Preço social substitui QUALQUER preço vigente (base ou override
-  // regional) — é a política institucional pra unidade social, não um
-  // desconto sobre o que a regional negociou.
-  if (unidadeSocial && produto.precoSocialHabilitado && produto.precificacaoSocial) {
-    preco = produto.precificacaoSocial;
-  }
+  // Preço social substitui o preço normal por completo — é a política
+  // institucional pra unidade social, não um desconto sobre o valor de tabela.
+  const preco =
+    unidadeSocial && produto.precoSocialHabilitado && produto.precificacaoSocial
+      ? produto.precificacaoSocial
+      : produto.precificacao;
 
   return {
     produtoId: produto.id,

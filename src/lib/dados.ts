@@ -23,10 +23,8 @@ import type {
   ItemModelo,
   Mantenedora,
   Modelo,
-  Obrigatoriedade,
   Produto,
   Regional,
-  RegraHabilitacao,
   TipoUnidade,
   Unidade,
 } from '@dominio/tipos';
@@ -401,7 +399,6 @@ export async function atualizarProduto(id: string, dados: Partial<DadosProduto>)
 export async function duplicarProduto(id: string): Promise<string> {
   const original = await obterProduto(id);
   if (!original) throw new Error('Solução não encontrada.');
-  const regras = await getDocs(collection(db, 'produtos', id, 'regras'));
 
   const agora = new Date().toISOString();
   const { id: _id, criadoEm: _criadoEm, atualizadoEm: _atualizadoEm, ...dados } = original;
@@ -415,52 +412,28 @@ export async function duplicarProduto(id: string): Promise<string> {
     criadoEm: agora,
     atualizadoEm: agora,
   });
-
-  if (!regras.empty) {
-    const lote = writeBatch(db);
-    for (const r of regras.docs) {
-      lote.set(doc(db, 'produtos', ref.id, 'regras', r.id), { ...r.data(), produtoId: ref.id });
-    }
-    await lote.commit();
-  }
-
   return ref.id;
 }
 
 export async function excluirProduto(id: string): Promise<void> {
-  // As regras vão junto: subcoleção órfã continuaria habilitando um produto
-  // que não existe mais.
-  const regras = await getDocs(collection(db, 'produtos', id, 'regras'));
-  const lote = writeBatch(db);
-  regras.docs.forEach((r) => lote.delete(r.ref));
-  lote.delete(doc(db, 'produtos', id));
-  await lote.commit();
+  await deleteDoc(doc(db, 'produtos', id));
 }
 
 /**
- * Apaga todo o catálogo de um ciclo — produto e regras de todos, de uma vez.
- * Existe para limpar dado de teste durante a montagem do catálogo; um
- * ciclo com pedido já em andamento não deveria passar por aqui.
- *
- * Cada exclusão vira duas operações (produto + suas regras), e o lote do
- * Firestore tem teto de 500 — por isso os deletes saem em blocos.
+ * Apaga todo o catálogo de um ciclo de uma vez. Existe para limpar dado de
+ * teste durante a montagem do catálogo; um ciclo com pedido já em andamento
+ * não deveria passar por aqui.
  */
 export async function excluirTodosProdutos(cicloId: string): Promise<number> {
   const produtos = await listarProdutos(cicloId);
   if (produtos.length === 0) return 0;
 
-  const refsRegras = await Promise.all(
-    produtos.map((p) => getDocs(collection(db, 'produtos', p.id, 'regras'))),
-  );
-  const paraApagar = [
-    ...produtos.map((p) => doc(db, 'produtos', p.id)),
-    ...refsRegras.flatMap((snap) => snap.docs.map((r) => r.ref)),
-  ];
-
+  // O lote do Firestore tem teto de 500 operações; um ciclo tem dezenas de
+  // soluções, mas o bloco fica aqui de qualquer forma — catálogo cresce.
   const TAMANHO_BLOCO = 450;
-  for (let i = 0; i < paraApagar.length; i += TAMANHO_BLOCO) {
+  for (let i = 0; i < produtos.length; i += TAMANHO_BLOCO) {
     const lote = writeBatch(db);
-    for (const ref of paraApagar.slice(i, i + TAMANHO_BLOCO)) lote.delete(ref);
+    for (const p of produtos.slice(i, i + TAMANHO_BLOCO)) lote.delete(doc(db, 'produtos', p.id));
     await lote.commit();
   }
 
@@ -534,53 +507,6 @@ export async function atualizarModelo(id: string, dados: Partial<DadosModelo>): 
 
 export async function excluirModelo(id: string): Promise<void> {
   await deleteDoc(doc(db, 'modelos', id));
-}
-
-// ─── Regras de habilitação ───────────────────────────────────────
-
-/**
- * A unidade de configuração do catálogo. Ausência de documento significa
- * "indisponível" — por isso desmarcar apaga em vez de gravar um estado.
- */
-export async function listarRegras(produtoId: string): Promise<RegraHabilitacao[]> {
-  const snap = await getDocs(collection(db, 'produtos', produtoId, 'regras'));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as RegraHabilitacao);
-}
-
-export type GradeHabilitacao = Record<string, Record<string, Obrigatoriedade>>;
-
-/** Converte a subcoleção na grade regional × ano que a tela manipula. */
-export function regrasParaGrade(regras: readonly RegraHabilitacao[]): GradeHabilitacao {
-  const grade: GradeHabilitacao = {};
-  for (const r of regras) {
-    (grade[r.regionalId] ??= {})[r.anoEscolar] = r.obrigatoriedade;
-  }
-  return grade;
-}
-
-export async function salvarGrade(
-  produtoId: string,
-  grade: GradeHabilitacao,
-  anteriores: readonly RegraHabilitacao[],
-): Promise<void> {
-  const lote = writeBatch(db);
-  const base = collection(db, 'produtos', produtoId, 'regras');
-  const vistos = new Set<string>();
-
-  for (const [regionalId, anos] of Object.entries(grade)) {
-    for (const [anoEscolar, estado] of Object.entries(anos)) {
-      if (estado === 'indisponivel') continue;
-      const id = `${regionalId}_${anoEscolar}`;
-      vistos.add(id);
-      lote.set(doc(base, id), { produtoId, regionalId, anoEscolar, obrigatoriedade: estado });
-    }
-  }
-
-  for (const antiga of anteriores) {
-    if (!vistos.has(antiga.id)) lote.delete(doc(base, antiga.id));
-  }
-
-  await lote.commit();
 }
 
 // Marcador para futuras escritas que precisem de horário do servidor.

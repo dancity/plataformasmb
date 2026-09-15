@@ -5,7 +5,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import {
-  collectionGroup,
+  collection,
   doc,
   getDoc,
   getDocs,
@@ -110,9 +110,6 @@ beforeEach(async () => {
       email: 'g@x.com', papel: 'gestor_unidade', unidadeId: BOA_VIAGEM, regionalId: RECIFE,
     });
 
-    await setDoc(doc(bd, 'produtos', 'p1', 'regras', `${RECIFE}_EF1`), {
-      produtoId: 'p1', regionalId: RECIFE, anoEscolar: 'EF1', obrigatoriedade: 'obrigatorio',
-    });
   });
 });
 
@@ -348,10 +345,9 @@ describe('segredos e privilégios', () => {
 });
 
 // Regressão: carregarContexto() lê matrícula e pedido antes de qualquer um
-// dos dois existir (toda unidade começa assim) e resolve a habilitação com
-// uma consulta collectionGroup em vez de uma leitura por produto. As duas
-// coisas já derrubaram o fluxo inteiro do gestor em produção sem que
-// nenhum teste aqui pegasse — ver `firestore.rules`.
+// dos dois existir — toda unidade começa assim. Isso já derrubou o fluxo
+// inteiro do gestor em produção sem que nenhum teste aqui pegasse; ver
+// `firestore.rules`.
 describe('primeira visita da unidade — documento ainda não existe', () => {
   it('gestor lê a própria matrícula antes dela existir', async () => {
     await assertSucceeds(getDoc(doc(gestorBoaViagem(), 'matriculas', `c2029_${BOA_VIAGEM}`)));
@@ -373,15 +369,13 @@ describe('primeira visita da unidade — documento ainda não existe', () => {
   });
 });
 
-describe('regras de habilitação por collectionGroup', () => {
-  it('gestor resolve a habilitação de todas as soluções numa consulta só', async () => {
-    await assertSucceeds(
-      getDocs(query(collectionGroup(gestorBoaViagem(), 'regras'), where('regionalId', '==', RECIFE))),
-    );
+describe('habilitação vem no próprio produto', () => {
+  it('gestor lê o catálogo inteiro numa consulta só', async () => {
+    await assertSucceeds(getDocs(collection(gestorBoaViagem(), 'produtos')));
   });
 
-  it('quem não tem papel não lê regras por collectionGroup', async () => {
-    await assertFails(getDocs(collectionGroup(semClaims(), 'regras')));
-    await assertFails(getDocs(collectionGroup(deslogado(), 'regras')));
+  it('quem não tem papel não lê o catálogo', async () => {
+    await assertFails(getDocs(collection(semClaims(), 'produtos')));
+    await assertFails(getDocs(collection(deslogado(), 'produtos')));
   });
 });

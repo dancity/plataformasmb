@@ -1,7 +1,7 @@
 /**
  * Confere a matemática do catálogo real contra o cenário do plano.
  *
- * Lê produtos, regras e previsão direto do Firestore e roda as MESMAS funções
+ * Lê produtos e previsão direto do Firestore e roda as MESMAS funções
  * de domínio que o app e a Cloud Function usam. Se um preço estiver errado no
  * cadastro, ou uma regra de habilitação faltando, o total não fecha e o script
  * falha — sem precisar abrir o navegador nem clicar em nada.
@@ -22,7 +22,6 @@ const db = getFirestore();
 
 const CICLO = 'c2027';
 const UNIDADE = 'boa-viagem';
-const REGIONAL = 'recife';
 
 /** O que o gestor do plano escolheria, entre as opcionais. */
 const ESCOLHAS = {
@@ -42,10 +41,9 @@ const ESPERADO = {
 };
 const TOTAL_ESPERADO = 16_250_000; // R$ 162.500,00
 
-const [matriculaDoc, produtosSnap, regrasSnap] = await Promise.all([
+const [matriculaDoc, produtosSnap] = await Promise.all([
   db.collection('matriculas').doc(`${CICLO}_${UNIDADE}`).get(),
   db.collection('produtos').where('cicloId', '==', CICLO).where('visibilidade', '==', 'publicado').get(),
-  db.collectionGroup('regras').where('regionalId', '==', REGIONAL).get(),
 ]);
 
 if (!matriculaDoc.exists) {
@@ -55,7 +53,6 @@ if (!matriculaDoc.exists) {
 
 const previsao = matriculaDoc.data().porAno;
 const produtos = produtosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-const regras = regrasSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
 console.log(`Unidade fictícia · ${Object.values(previsao).reduce((a, b) => a + b, 0)} alunos\n`);
 
@@ -63,7 +60,7 @@ let total = 0;
 let falhas = 0;
 
 for (const produto of produtos.sort((a, b) => a.ordem - b.ordem)) {
-  const hab = resolverHabilitacao(produto, regras, REGIONAL, previsao);
+  const hab = resolverHabilitacao(produto, previsao);
   if (!hab.disponivel) {
     console.log(`  ${produto.nome}: indisponível nesta regional`);
     continue;
@@ -92,5 +89,5 @@ if (total !== TOTAL_ESPERADO || falhas > 0) {
   console.error(`\nFALHOU: ${falhas} solução(ões) fora do esperado.`);
   process.exit(1);
 }
-console.log('\nTudo confere: catálogo, regras de habilitação e cálculo batem com o plano.');
+console.log('\nTudo confere: catálogo, habilitação por ano e cálculo batem com o plano.');
 process.exit(0);

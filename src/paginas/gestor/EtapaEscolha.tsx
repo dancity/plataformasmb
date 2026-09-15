@@ -72,7 +72,7 @@ export function EtapaEscolha({
 }) {
   const linhas = useMemo(
     () =>
-      calcularLinhas(ctx, sessao.regionalId ?? '').filter(
+      calcularLinhas(ctx).filter(
         (l) => l.produto.categoria !== CATEGORIA_AVALIACAO_LARGA_ESCALA,
       ),
     [ctx, sessao.regionalId],

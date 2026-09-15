@@ -14,7 +14,7 @@ dominio/          código puro compartilhado entre app e functions
   anosEscolares   catálogo dos 17 anos (EI1..EI5, EF1..EF9, EM1..EM3)
   tipos           documentos do Firestore
   preco           normalização de preço → valor anual em CENTAVOS
-  habilitacao     resolve produto × regional × ano → o que a unidade pode contratar
+  habilitacao     resolve produto × ano escolar × previsão → o que a unidade contrata
 src/              app React (Vite + Tailwind v4)
   lib/            firebase, auth (claims), tema
   componentes/    design system + layout
@@ -44,8 +44,15 @@ combinam por OU — uma `match /{doc=**} { allow read: if true }` anula o arquiv
 inteiro. (O `firebase init` tenta plantar exatamente isso; se rodar de novo,
 confira o arquivo depois.)
 
-**Obrigatoriedade é da regra, não do produto.** A mesma solução pode ser
-obrigatória no Fundamental de Recife e indisponível no Médio de Curitiba.
+**Habilitação é nacional, e mora no produto.** `produto.habilitacao` diz, por
+ano escolar, se a solução é opcional ou obrigatória — vale igual para a rede
+inteira. A regional **não configura catálogo**: ela é instância aprovadora
+depois que a unidade preenche. Já foi por regional, numa subcoleção
+`produtos/{id}/regras`; `functions/scripts/migrar-habilitacao.mjs` fez a
+conversão (relatório primeiro, `--gravar` depois).
+
+O que varia por unidade é só a previsão de alunos: ano que a unidade não
+oferta não aparece na escolha, mesmo habilitado no catálogo.
 
 **Modo escuro por inversão de variável.** `src/tema-escuro.css` redefine os
 tokens; nenhum componente usa `dark:`. Tela nova nasce com os dois temas.

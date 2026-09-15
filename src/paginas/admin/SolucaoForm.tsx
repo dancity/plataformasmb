@@ -1,25 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { GradeHabilitacao } from '@/componentes/GradeHabilitacao';
+import { HabilitacaoAnos } from '@/componentes/HabilitacaoAnos';
 import { Botao, Campo, Entrada, EsqueletoLinhas, EstadoVazio, Selecao } from '@/componentes/ui';
-import type { GradeHabilitacao as Grade } from '@/lib/dados';
 import {
   atualizarProduto,
   criarProduto,
   listarFornecedores,
-  listarRegionais,
-  listarRegras,
   obterProduto,
-  regrasParaGrade,
-  salvarGrade,
 } from '@/lib/dados';
 import type {
   BasePreco,
+  HabilitacaoPorAno,
   CicloCobranca,
   Fornecedor,
   Precificacao,
-  Regional,
-  RegraHabilitacao,
   Visibilidade,
 } from '@dominio/tipos';
 import { descreverPreco, reaisParaCentavos } from '@dominio/preco';
@@ -27,11 +21,11 @@ import { CATEGORIA_AVALIACAO_LARGA_ESCALA, CATEGORIA_REDACAO } from '@dominio/ti
 import { useAdmin } from './LayoutAdmin';
 
 /**
- * Cadastro de solução, em página cheia — não em modal. A grade regional × ano
- * escolar é larga (17 colunas) e o formulário é comprido; espremer os dois
- * numa caixa de altura fixa é o tipo de coisa que só aparece testando de
- * verdade, com dado de verdade. Página inteira rola do jeito normal do
- * navegador, sem inventar scroll dentro de scroll.
+ * Cadastro de solução, em página cheia — não em modal. O formulário é
+ * comprido (preço normal, preço social, os 17 anos escolares) e espremer isso
+ * numa caixa de altura fixa é o tipo de coisa que só aparece testando com
+ * dado de verdade. Página inteira rola do jeito normal do navegador, sem
+ * inventar scroll dentro de scroll.
  */
 
 const CATEGORIAS = [
@@ -183,10 +177,8 @@ export function SolucaoForm() {
 
   const [carregando, setCarregando] = useState(true);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
-  const [regionais, setRegionais] = useState<Regional[]>([]);
   const [rascunho, setRascunho] = useState<Rascunho>(VAZIO);
-  const [grade, setGrade] = useState<Grade>({});
-  const [regrasAtuais, setRegrasAtuais] = useState<RegraHabilitacao[]>([]);
+  const [habilitacao, setHabilitacao] = useState<HabilitacaoPorAno>({});
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [naoEncontrada, setNaoEncontrada] = useState(false);
@@ -197,21 +189,15 @@ export function SolucaoForm() {
       return;
     }
     try {
-      const [fs, rs] = await Promise.all([listarFornecedores(), listarRegionais()]);
-      setFornecedores(fs);
-      setRegionais(rs);
+      setFornecedores(await listarFornecedores());
 
       if (produtoId) {
-        const [produto, regras] = await Promise.all([
-          obterProduto(produtoId),
-          listarRegras(produtoId),
-        ]);
+        const produto = await obterProduto(produtoId);
         if (!produto) {
           setNaoEncontrada(true);
           return;
         }
-        setRegrasAtuais(regras);
-        setGrade(regrasParaGrade(regras));
+        setHabilitacao(produto.habilitacao ?? {});
         const social = produto.precificacaoSocial;
         setRascunho({
           nome: produto.nome,
@@ -330,11 +316,11 @@ export function SolucaoForm() {
         precoSocialHabilitado: rascunho.precoSocialHabilitado,
         ...(precificacaoSocial ? { precificacaoSocial } : {}),
         visibilidade: rascunho.visibilidade,
+        habilitacao,
       };
 
-      const id = editando ? produtoId! : await criarProduto(dados);
-      if (editando) await atualizarProduto(id, dados);
-      await salvarGrade(id, grade, regrasAtuais);
+      if (editando) await atualizarProduto(produtoId!, dados);
+      else await criarProduto(dados);
 
       navegar('/admin/solucoes');
     } catch (e) {
@@ -409,8 +395,8 @@ export function SolucaoForm() {
           {editando ? 'Editar solução' : 'Nova solução'}
         </h1>
         <p className="text-sm text-gray-500">
-          Preço e habilitação nascem juntos: uma solução sem célula marcada na grade não existe
-          para nenhuma unidade.
+          Preço e habilitação nascem juntos: uma solução sem nenhum ano marcado não existe para
+          nenhuma unidade.
         </p>
       </div>
 
@@ -551,13 +537,7 @@ export function SolucaoForm() {
 
       <fieldset className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4">
         <legend className="px-1 text-sm font-medium text-gray-700">Onde pode ser contratada</legend>
-        {regionais.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            Cadastre as regionais na aba Ciclo antes de habilitar a solução.
-          </p>
-        ) : (
-          <GradeHabilitacao regionais={regionais} grade={grade} aoMudar={setGrade} />
-        )}
+        <HabilitacaoAnos habilitacao={habilitacao} aoMudar={setHabilitacao} />
       </fieldset>
 
       <Campo

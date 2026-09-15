@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { calcularLinhas, computarItem, resolverItensDoModelo } from '@/lib/pedido';
 import type { ContextoPedido } from '@/lib/pedido';
 import { resolverHabilitacao } from '@dominio/habilitacao';
-import type { Ciclo, Modelo, Produto, RegraHabilitacao, Unidade } from '@dominio/tipos';
+import type { Ciclo, Modelo, Produto, Unidade } from '@dominio/tipos';
 
 /**
  * `resolverItensDoModelo` é o coração da funcionalidade de Modelos: decide,
@@ -35,6 +35,7 @@ function produto(parcial: Partial<Produto> & Pick<Produto, 'id' | 'nome' | 'prec
     fornecedorId: 'editora-alfa',
     categoria: 'Avaliação',
     descricao: '',
+    habilitacao: {},
     ordem: 10,
     visibilidade: 'publicado',
     criadoEm: CICLO.criadoEm,
@@ -47,6 +48,7 @@ const PRODUTO_ALUNO = produto({
   id: 'diagnostica',
   nome: 'Avaliação Diagnóstica',
   precificacao: { base: 'aluno', ciclo: 'anual', valor: 4000, meses: 12 },
+  habilitacao: { EF1: 'obrigatorio', EF2: 'opcional' },
 });
 
 const PRODUTO_CREDITO = produto({
@@ -54,46 +56,17 @@ const PRODUTO_CREDITO = produto({
   nome: 'Correção de Redação',
   categoria: 'Simulados',
   precificacao: { base: 'credito', ciclo: 'mensal', valor: 500, meses: 10 },
+  habilitacao: { EF1: 'opcional', EF2: 'opcional' },
 });
 
-// Não tem regra nenhuma nesta regional — fica indisponível.
-const PRODUTO_SEM_REGRA = produto({
+// Não é oferecido em nenhum ano — fica indisponível para todo mundo.
+const PRODUTO_SEM_ANO = produto({
   id: 'robotica',
   nome: 'Robótica Educacional',
   categoria: 'Robótica e tecnologia',
   precificacao: { base: 'aluno', ciclo: 'mensal', valor: 1500, meses: 10 },
+  habilitacao: {},
 });
-
-const REGRAS: RegraHabilitacao[] = [
-  {
-    id: 'recife_EF1',
-    produtoId: 'diagnostica',
-    regionalId: 'recife',
-    anoEscolar: 'EF1',
-    obrigatoriedade: 'obrigatorio',
-  },
-  {
-    id: 'recife_EF2',
-    produtoId: 'diagnostica',
-    regionalId: 'recife',
-    anoEscolar: 'EF2',
-    obrigatoriedade: 'opcional',
-  },
-  {
-    id: 'recife_EF1_redacao',
-    produtoId: 'redacao',
-    regionalId: 'recife',
-    anoEscolar: 'EF1',
-    obrigatoriedade: 'opcional',
-  },
-  {
-    id: 'recife_EF2_redacao',
-    produtoId: 'redacao',
-    regionalId: 'recife',
-    anoEscolar: 'EF2',
-    obrigatoriedade: 'opcional',
-  },
-];
 
 function contexto(): ContextoPedido {
   return {
@@ -101,8 +74,7 @@ function contexto(): ContextoPedido {
     unidade: UNIDADE,
     previsao: { EF1: 88, EF2: 92 },
     previsaoConfirmada: true,
-    produtos: [PRODUTO_ALUNO, PRODUTO_CREDITO, PRODUTO_SEM_REGRA],
-    regras: REGRAS,
+    produtos: [PRODUTO_ALUNO, PRODUTO_CREDITO, PRODUTO_SEM_ANO],
     fornecedores: new Map([
       ['editora-alfa', 'Editora Alfa'],
       ['instituto-beta', 'Instituto Beta'],
@@ -115,7 +87,7 @@ function contexto(): ContextoPedido {
 describe('resolverItensDoModelo', () => {
   it('respeita os anos escolhidos no modelo, e obrigatório entra de qualquer jeito', () => {
     const ctx = contexto();
-    const linhas = calcularLinhas(ctx, 'recife');
+    const linhas = calcularLinhas(ctx);
     const modelo: Modelo = {
       id: 'm1',
       cicloId: CICLO.id,
@@ -164,7 +136,7 @@ describe('resolverItensDoModelo', () => {
 
   it('lista como indisponível o produto sem regra nesta regional', () => {
     const ctx = contexto();
-    const linhas = calcularLinhas(ctx, 'recife');
+    const linhas = calcularLinhas(ctx);
     const modelo: Modelo = {
       id: 'm2',
       cicloId: CICLO.id,
@@ -188,7 +160,7 @@ describe('resolverItensDoModelo', () => {
 
   it('lista como indisponível quando os anos escolhidos não cruzam com nada habilitado aqui', () => {
     const ctx = contexto();
-    const linhas = calcularLinhas(ctx, 'recife');
+    const linhas = calcularLinhas(ctx);
     const modelo: Modelo = {
       id: 'm4',
       cicloId: CICLO.id,
@@ -211,7 +183,7 @@ describe('resolverItensDoModelo', () => {
 
   it('produto removido do catálogo entra no indisponível pelo id, sem quebrar', () => {
     const ctx = contexto();
-    const linhas = calcularLinhas(ctx, 'recife');
+    const linhas = calcularLinhas(ctx);
     const modelo: Modelo = {
       id: 'm3',
       cicloId: CICLO.id,
@@ -240,7 +212,7 @@ describe('resolverItensDoModelo', () => {
  */
 describe('computarItem — carimbo de origem do modelo', () => {
   const ctx = contexto();
-  const linhas = calcularLinhas(ctx, 'recife');
+  const linhas = calcularLinhas(ctx);
   const linhaDiagnostica = linhas.find((l) => l.produto.id === 'diagnostica')!;
 
   it('carimba origemModeloId e origemModeloNome quando aplicado via modelo', () => {
@@ -283,25 +255,17 @@ describe('resolverHabilitacao — preço social', () => {
     precificacao: { base: 'aluno', ciclo: 'anual', valor: 4000, meses: 12 },
     precoSocialHabilitado: true,
     precificacaoSocial: { base: 'aluno', ciclo: 'anual', valor: 1000, meses: 12 },
+    habilitacao: { EF1: 'opcional' },
   });
-  const regras: RegraHabilitacao[] = [
-    {
-      id: 'recife_EF1',
-      produtoId: 'diagnostica-social',
-      regionalId: 'recife',
-      anoEscolar: 'EF1',
-      obrigatoriedade: 'opcional',
-    },
-  ];
   const previsao = { EF1: 88 };
 
   it('unidade paga (padrão) usa o preço normal mesmo a solução tendo preço social', () => {
-    const hab = resolverHabilitacao(produtoComSocial, regras, 'recife', previsao, false);
+    const hab = resolverHabilitacao(produtoComSocial, previsao, false);
     expect(hab.preco.valor).toBe(4000);
   });
 
   it('unidade social usa o preço social quando habilitado', () => {
-    const hab = resolverHabilitacao(produtoComSocial, regras, 'recife', previsao, true);
+    const hab = resolverHabilitacao(produtoComSocial, previsao, true);
     expect(hab.preco.valor).toBe(1000);
   });
 
@@ -310,26 +274,15 @@ describe('resolverHabilitacao — preço social', () => {
       id: 'diagnostica-sem-social',
       nome: 'Avaliação sem preço social',
       precificacao: { base: 'aluno', ciclo: 'anual', valor: 4000, meses: 12 },
+      habilitacao: { EF1: 'opcional' },
     });
-    const hab = resolverHabilitacao(
-      semSocial,
-      [{ ...regras[0]!, produtoId: 'diagnostica-sem-social' }],
-      'recife',
-      previsao,
-      true,
-    );
+    const hab = resolverHabilitacao(semSocial, previsao, true);
     expect(hab.preco.valor).toBe(4000);
   });
 
-  it('preço social vale mais que o override regional — é a política mais forte', () => {
-    const comOverrideRegional: RegraHabilitacao[] = [
-      {
-        ...regras[0]!,
-        precoOverride: { base: 'aluno', ciclo: 'anual', valor: 7000, meses: 12 },
-      },
-    ];
-    const hab = resolverHabilitacao(produtoComSocial, comOverrideRegional, 'recife', previsao, true);
-    expect(hab.preco.valor).toBe(1000);
+  it('ano que a unidade não oferta não entra, mesmo habilitado no catálogo', () => {
+    const hab = resolverHabilitacao(produtoComSocial, { EF1: 0, EF2: 30 }, false);
+    expect(hab.disponivel).toBe(false);
   });
 
   it('calcularLinhas aplica o preço social sozinho, a partir de ctx.unidade.tipo', () => {
@@ -339,12 +292,11 @@ describe('resolverHabilitacao — preço social', () => {
       previsao,
       previsaoConfirmada: true,
       produtos: [produtoComSocial],
-      regras,
       fornecedores: new Map([['editora-alfa', 'Editora Alfa']]),
       pedido: null,
       itens: new Map(),
     };
-    const linhas = calcularLinhas(ctx, 'recife');
+    const linhas = calcularLinhas(ctx);
     expect(linhas[0]!.habilitacao.preco.valor).toBe(1000);
   });
 });

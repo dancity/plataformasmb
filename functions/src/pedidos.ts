@@ -11,7 +11,6 @@ import type {
   Matricula,
   Pedido,
   Produto,
-  RegraHabilitacao,
   TotaisPedido,
   Unidade,
 } from '../../dominio/tipos';
@@ -130,13 +129,15 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   }
   const previsao = (matriculaDoc.data() as Matricula).porAno;
 
-  const [produtosSnap, regrasSnap, fornecedoresSnap, itensSnap, unidadeDoc] = await Promise.all([
+  // A habilitação é nacional e vem dentro do produto: não há leitura de regras
+  // por regional. A regional continua importando pro roteamento da aprovação,
+  // não pro que a unidade pode contratar.
+  const [produtosSnap, fornecedoresSnap, itensSnap, unidadeDoc] = await Promise.all([
     db
       .collection('produtos')
       .where('cicloId', '==', cicloId)
       .where('visibilidade', '==', 'publicado')
       .get(),
-    db.collectionGroup('regras').where('regionalId', '==', quem.regionalId).get(),
     db.collection('fornecedores').get(),
     pedidoRef.collection('itens').get(),
     db.collection('unidades').doc(quem.unidadeId).get(),
@@ -146,7 +147,6 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   const unidadeSocial = (unidadeDoc.data() as Unidade | undefined)?.tipo === 'social';
 
   const produtos = produtosSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Produto);
-  const regras = regrasSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as RegraHabilitacao);
   const nomeFornecedor = new Map(
     fornecedoresSnap.docs.map((d) => [d.id, (d.data() as Fornecedor).nome]),
   );
@@ -193,7 +193,7 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   const pendentes: string[] = [];
 
   for (const produto of produtos) {
-    const hab = resolverHabilitacao(produto, regras, quem.regionalId, previsao, unidadeSocial);
+    const hab = resolverHabilitacao(produto, previsao, unidadeSocial);
     if (!hab.disponivel) continue;
 
     const escolha = escolhas.get(produto.id);

@@ -1,6 +1,5 @@
 import {
   collection,
-  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -26,7 +25,6 @@ import type {
   Modelo,
   Pedido,
   Produto,
-  RegraHabilitacao,
   Unidade,
 } from '@dominio/tipos';
 import { db, functions } from './firebase';
@@ -47,7 +45,6 @@ export interface ContextoPedido {
   previsao: PrevisaoPorAno;
   previsaoConfirmada: boolean;
   produtos: Produto[];
-  regras: RegraHabilitacao[];
   /** Cadastro inteiro, não só o nome: a marca do fornecedor entra nos cards
    *  da etapa de escolha, e ela vem na mesma leitura. */
   fornecedores: Map<string, Fornecedor>;
@@ -76,22 +73,22 @@ export async function carregarContexto(sessao: Sessao): Promise<ContextoPedido |
   const ciclo = await cicloCorrente();
   if (!ciclo) return null;
 
-  const [unidadeDoc, matriculaDoc, produtosSnap, regrasSnap, fornecedoresSnap, pedidoDoc] =
-    await Promise.all([
-      getDoc(doc(db, 'unidades', sessao.unidadeId)),
-      getDoc(doc(db, 'matriculas', idMatricula(ciclo.id, sessao.unidadeId))),
-      getDocs(
-        query(
-          collection(db, 'produtos'),
-          where('cicloId', '==', ciclo.id),
-          where('visibilidade', '==', 'publicado'),
-          orderBy('ordem'),
-        ),
+  // A habilitação vem dentro do próprio produto — não há mais uma leitura de
+  // regras por regional pra fazer aqui.
+  const [unidadeDoc, matriculaDoc, produtosSnap, fornecedoresSnap, pedidoDoc] = await Promise.all([
+    getDoc(doc(db, 'unidades', sessao.unidadeId)),
+    getDoc(doc(db, 'matriculas', idMatricula(ciclo.id, sessao.unidadeId))),
+    getDocs(
+      query(
+        collection(db, 'produtos'),
+        where('cicloId', '==', ciclo.id),
+        where('visibilidade', '==', 'publicado'),
+        orderBy('ordem'),
       ),
-      getDocs(query(collectionGroup(db, 'regras'), where('regionalId', '==', sessao.regionalId))),
-      getDocs(collection(db, 'fornecedores')),
-      getDoc(doc(db, 'pedidos', idPedido(ciclo.id, sessao.unidadeId))),
-    ]);
+    ),
+    getDocs(collection(db, 'fornecedores')),
+    getDoc(doc(db, 'pedidos', idPedido(ciclo.id, sessao.unidadeId))),
+  ]);
 
   if (!unidadeDoc.exists()) return null;
 
@@ -112,7 +109,6 @@ export async function carregarContexto(sessao: Sessao): Promise<ContextoPedido |
     previsao: matricula?.porAno ?? {},
     previsaoConfirmada: !!matricula?.confirmadaEm,
     produtos: produtosSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Produto),
-    regras: regrasSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as RegraHabilitacao),
     fornecedores: new Map(
       fornecedoresSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() } as Fornecedor]),
     ),
@@ -275,17 +271,11 @@ export interface LinhaCalculada {
 }
 
 /** Resolve habilitação e valor de todas as soluções de uma vez. */
-export function calcularLinhas(ctx: ContextoPedido, regionalId: string): LinhaCalculada[] {
+export function calcularLinhas(ctx: ContextoPedido): LinhaCalculada[] {
   const unidadeSocial = ctx.unidade.tipo === 'social';
   return ctx.produtos
     .map((produto) => {
-      const habilitacao = resolverHabilitacao(
-        produto,
-        ctx.regras,
-        regionalId,
-        ctx.previsao,
-        unidadeSocial,
-      );
+      const habilitacao = resolverHabilitacao(produto, ctx.previsao, unidadeSocial);
       const item = ctx.itens.get(produto.id);
       const obrigatoria = habilitacao.obrigatorios.length > 0;
       return {

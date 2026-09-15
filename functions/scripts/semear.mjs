@@ -1,7 +1,7 @@
 /**
  * Popula o ciclo 2027 com dados de teste realistas: as 6 regionais, cinco
  * fornecedores, uma unidade fictícia de 1.230 alunos e seis soluções com as
- * regras de habilitação já montadas.
+ * habilitação por ano escolar já montada.
  *
  * São exatamente os números do plano — é o que permite conferir na tela se o
  * total bate com R$ 162.500/ano, em vez de olhar para um número qualquer e
@@ -186,11 +186,14 @@ async function semear() {
 
   await lote.commit();
 
-  // Produtos e regras em lote próprio: o lote anterior já está perto do teto
-  // de 500 operações quando as regras entram.
+  // A habilitação é nacional e mora no próprio produto: um documento por
+  // solução, sem subcoleção.
   for (const p of PRODUTOS) {
-    const ref = db.collection('produtos').doc(p.id);
-    await ref.set(
+    const habilitacao = {};
+    for (const ano of p.opcional) habilitacao[ano] = 'opcional';
+    for (const ano of p.obrigatorio) habilitacao[ano] = 'obrigatorio';
+
+    await db.collection('produtos').doc(p.id).set(
       {
         cicloId: CICLO,
         nome: p.nome,
@@ -198,6 +201,7 @@ async function semear() {
         categoria: p.categoria,
         descricao: p.descricao,
         precificacao: p.precificacao,
+        habilitacao,
         ordem: p.ordem,
         visibilidade: 'publicado',
         criadoEm: agora(),
@@ -205,29 +209,8 @@ async function semear() {
       },
       { merge: true },
     );
-
-    const regras = db.batch();
-    for (const [, regionalId] of REGIONAIS.map((r) => [r[1], r[0]])) {
-      for (const ano of p.obrigatorio) {
-        regras.set(ref.collection('regras').doc(`${regionalId}_${ano}`), {
-          produtoId: p.id,
-          regionalId,
-          anoEscolar: ano,
-          obrigatoriedade: 'obrigatorio',
-        });
-      }
-      for (const ano of p.opcional) {
-        regras.set(ref.collection('regras').doc(`${regionalId}_${ano}`), {
-          produtoId: p.id,
-          regionalId,
-          anoEscolar: ano,
-          obrigatoriedade: 'opcional',
-        });
-      }
-    }
-    await regras.commit();
     console.log(
-      `  ${p.nome} — ${p.obrigatorio.length} obrigatórios + ${p.opcional.length} opcionais × 6 regionais`,
+      `  ${p.nome} — ${p.obrigatorio.length} obrigatórios + ${p.opcional.length} opcionais`,
     );
   }
 }

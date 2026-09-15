@@ -174,6 +174,11 @@ export interface Produto {
   precificacaoSocial?: Precificacao;
   precoSocialHabilitado?: boolean;
   /**
+   * Onde a solução é oferecida. Sem nenhum ano marcado aqui, ela não existe
+   * para ninguém — é o par indissociável do preço.
+   */
+  habilitacao: HabilitacaoPorAno;
+  /**
    * Ordem na etapa de escolha, em sequência normalizada (1, 2, 3…). Quem
    * define é o botão de subir/descer na tela de Soluções, não um número
    * digitado no cadastro: ordem é uma relação entre as soluções, e digitar
@@ -224,19 +229,18 @@ export interface Modelo {
 export type Obrigatoriedade = 'indisponivel' | 'opcional' | 'obrigatorio';
 
 /**
- * A unidade de configuração é a regra, não o produto: a mesma solução pode ser
- * obrigatória no Fundamental de Recife e indisponível no Médio de Curitiba.
- * Ausência de documento equivale a 'indisponivel'.
+ * Em quais anos escolares a solução é oferecida, e de quem é a escolha.
+ * Ausência da chave equivale a 'indisponivel' — por isso desmarcar apaga em
+ * vez de gravar um terceiro estado.
+ *
+ * É NACIONAL: a mesma solução é oferecida do mesmo jeito em toda a rede. A
+ * regional não configura catálogo — ela aprova o pedido depois de preenchido.
+ * (Já foi por regional, numa subcoleção `produtos/{id}/regras`; o preço
+ * negociado por regional que justificava aquilo nunca chegou a ser usado.)
  */
-export interface RegraHabilitacao {
-  id: string; // `${regionalId}_${anoEscolar}`
-  produtoId: string;
-  regionalId: string;
-  anoEscolar: AnoEscolarId;
-  obrigatoriedade: Exclude<Obrigatoriedade, 'indisponivel'>;
-  /** Preço negociado nesta regional; sobrepõe o do produto quando existir. */
-  precoOverride?: Precificacao;
-}
+export type HabilitacaoPorAno = Partial<
+  Record<AnoEscolarId, Exclude<Obrigatoriedade, 'indisponivel'>>
+>;
 
 // ─── Previsão de alunos ──────────────────────────────────────────
 
