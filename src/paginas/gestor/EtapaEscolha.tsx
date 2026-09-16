@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarraProgresso,
   Botao,
@@ -10,28 +10,23 @@ import {
   LogoFornecedor,
   Selo,
   juntar,
-} from "@/componentes/ui";
-import type { Sessao } from "@/lib/auth";
-import { calcularLinhas, somarTotais } from "@/lib/pedido";
-import { descreverBloqueio } from "@dominio/vinculos";
-import type {
-  ContextoPedido,
-  EscritorPedido,
-  LinhaCalculada,
-} from "@/lib/pedido";
+} from '@/componentes/ui';
+import type { Sessao } from '@/lib/auth';
+import type { Conjunto } from '@dominio/tipos';
+import { calcularLinhas, somarTotais } from '@/lib/pedido';
+import { descreverBloqueio } from '@dominio/vinculos';
+import { PainelConjunto } from './PainelConjunto';
+import type { ContextoPedido, EscritorPedido, LinhaCalculada } from '@/lib/pedido';
 import {
   SEGMENTOS,
   anoEscolar,
   anosDoSegmento,
   aplicarLicencas,
   ordenarAnos,
-} from "@dominio/anosEscolares";
-import type { AnoEscolarId, PrevisaoPorAno } from "@dominio/anosEscolares";
-import { calcularItem, descreverPreco, formatarBRL } from "@dominio/preco";
-import {
-  CATEGORIA_AVALIACAO_LARGA_ESCALA,
-  CATEGORIA_REDACAO,
-} from "@dominio/tipos";
+} from '@dominio/anosEscolares';
+import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
+import { calcularItem, descreverPreco, formatarBRL } from '@dominio/preco';
+import { CATEGORIA_AVALIACAO_LARGA_ESCALA, CATEGORIA_REDACAO } from '@dominio/tipos';
 
 /**
  * Etapa 3 — soluções adicionais, uma de cada vez.
@@ -45,41 +40,122 @@ import {
 /** Aceita "1,5" e "1.5" — quem digita não deveria adivinhar o separador. */
 function numeroDeTexto(texto: string): number | null {
   const limpo = texto.trim();
-  if (limpo === "") return null;
-  const normalizado = limpo.includes(",")
-    ? limpo.replace(/\./g, "").replace(",", ".")
-    : limpo;
+  if (limpo === '') return null;
+  const normalizado = limpo.includes(',') ? limpo.replace(/\./g, '').replace(',', '.') : limpo;
   const n = Number(normalizado);
   return Number.isFinite(n) ? n : null;
 }
 
 function textoDoMultiplicador(creditos: number, alunos: number): string {
-  if (alunos <= 0) return "";
-  return (creditos / alunos).toLocaleString("pt-BR", {
+  if (alunos <= 0) return '';
+  return (creditos / alunos).toLocaleString('pt-BR', {
     maximumFractionDigits: 4,
   });
 }
 
 function IconeExterno() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      className="h-3.5 w-3.5"
-      aria-hidden="true"
-    >
-      <g
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
+    <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <g stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 4h6v6" />
         <path d="M20 4l-8 8" />
         <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
       </g>
     </svg>
   );
+}
+
+/**
+ * A jornada: onde a pessoa está, o que já decidiu, o que falta.
+ *
+ * Um passo de conjunto conta como um ponto só, e fica decidido quando todas
+ * as suas trilhas estiverem resolvidas — é assim que a pessoa pensa nele.
+ */
+function BarraJornada({
+  passos,
+  indice,
+  desabilitado,
+  aoIr,
+}: {
+  passos: readonly Passo[];
+  indice: number;
+  desabilitado: boolean;
+  aoIr: (i: number) => void;
+}) {
+  const decididos = passos.filter((p) => p.linhas.every((l) => l.decidida)).length;
+
+  return (
+    <Cartao className="h-fit gap-3 p-4">
+      <div className="flex flex-col gap-2 px-1">
+        <span className="font-mono text-[11px] tracking-wider text-gray-500 uppercase">
+          {decididos} de {passos.length} decididas
+        </span>
+        <BarraProgresso valor={decididos} total={passos.length} />
+      </div>
+
+      <ol className="relative flex flex-col">
+        {/* Trilha contínua ligando os pontos. Fica antes dos botões no DOM
+            e sem z-index: como eles também são `relative`, pintam por cima
+            dela — a linha aparece só no vão entre um ponto e outro. */}
+        <span aria-hidden="true" className="absolute top-4 bottom-4 left-[14px] w-px bg-gray-200" />
+        {passos.map((p, i) => {
+          const obrigatoria = p.linhas.some((l) => l.habilitacao.obrigatorios.length > 0);
+          const travada = p.linhas.every((l) => !!l.bloqueio);
+          const decidida = p.linhas.every((l) => l.decidida);
+          const recusadaAqui =
+            p.linhas.length > 0 && p.linhas.every((l) => l.item?.origem === 'recusado');
+          return (
+            <li key={p.chave}>
+              <button
+                type="button"
+                disabled={desabilitado}
+                onClick={() => aoIr(i)}
+                aria-current={i === indice ? 'step' : undefined}
+                className={juntar(
+                  'relative flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  i === indice
+                    ? 'bg-gray-100 font-medium text-gray-900'
+                    : 'text-gray-500 hover:bg-gray-100',
+                )}
+              >
+                {/* Travada mostra cadeado, não bolinha: é a única da lista
+                    em que não há decisão a tomar, e forma comunica isso
+                    sem depender de distinguir mais um tom de cinza. */}
+                {travada ? (
+                  <IconeCadeado />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className={juntar(
+                      'h-3 w-3 shrink-0 rounded-full',
+                      obrigatoria
+                        ? 'bg-orange-400'
+                        : decidida
+                          ? recusadaAqui
+                            ? 'bg-gray-300'
+                            : 'bg-green-500'
+                          : 'border-2 border-gray-300 bg-white',
+                    )}
+                  />
+                )}
+                <span className="min-w-0 flex-1 truncate">{p.nome}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </Cartao>
+  );
+}
+
+/** Um passo da etapa 3: uma solução solta, ou um conjunto inteiro. */
+interface Passo {
+  chave: string;
+  nome: string;
+  /** Presente quando o passo é um conjunto de escolha única por ano. */
+  conjunto?: Conjunto;
+  linhas: LinhaCalculada[];
 }
 
 export function EtapaEscolha({
@@ -101,11 +177,40 @@ export function EtapaEscolha({
 }) {
   const linhas = useMemo(
     () =>
-      calcularLinhas(ctx).filter(
-        (l) => l.produto.categoria !== CATEGORIA_AVALIACAO_LARGA_ESCALA,
-      ),
+      calcularLinhas(ctx).filter((l) => l.produto.categoria !== CATEGORIA_AVALIACAO_LARGA_ESCALA),
     [ctx, sessao.regionalId],
   );
+
+  /**
+   * A etapa avança por passos, não por soluções: um conjunto de escolha
+   * única ocupa UM passo, porque escolher entre as trilhas dele é uma
+   * decisão só. O passo entra na posição do primeiro membro, para a ordem
+   * do catálogo continuar valendo.
+   */
+  const passos = useMemo<Passo[]>(() => {
+    const conjuntoDe = new Map<string, Conjunto>();
+    for (const c of ctx.conjuntos) for (const id of c.produtoIds) conjuntoDe.set(id, c);
+
+    const emitidos = new Set<string>();
+    const resultado: Passo[] = [];
+    for (const l of linhas) {
+      const c = conjuntoDe.get(l.produto.id);
+      if (!c) {
+        resultado.push({ chave: l.produto.id, nome: l.produto.nome, linhas: [l] });
+        continue;
+      }
+      if (emitidos.has(c.id)) continue;
+      emitidos.add(c.id);
+      // Membro que a unidade não pode contratar (ano nenhum, ou travado) não
+      // vira coluna: a tabela mostraria uma alternativa que não é alternativa.
+      const membros = c.produtoIds
+        .map((id) => linhas.find((x) => x.produto.id === id))
+        .filter((x): x is LinhaCalculada => !!x && !x.bloqueio);
+      if (membros.length === 0) continue;
+      resultado.push({ chave: `conjunto:${c.id}`, nome: c.nome, conjunto: c, linhas: membros });
+    }
+    return resultado;
+  }, [linhas, ctx.conjuntos]);
 
   const [indice, setIndice] = useState(0);
   const [salvando, setSalvando] = useState(false);
@@ -119,14 +224,17 @@ export function EtapaEscolha({
   // Texto do "por aluno" de cada ano — espelha creditosPorAno, mas como
   // string própria pra não brigar com o cursor enquanto a pessoa digita um
   // decimal (0,5). Atualiza sozinho quando os créditos mudam por outra via.
-  const [multiplicadores, setMultiplicadores] = useState<
-    Partial<Record<AnoEscolarId, string>>
-  >({});
+  const [multiplicadores, setMultiplicadores] = useState<Partial<Record<AnoEscolarId, string>>>({});
   // Licenças ajustadas manualmente, ano a ano — ausente aqui segue a previsão.
   const [licencas, setLicencas] = useState<PrevisaoPorAno>({});
   const [ajustarLicencas, setAjustarLicencas] = useState(false);
 
-  const atual: LinhaCalculada | undefined = linhas[indice];
+  const passoAtual: Passo | undefined = passos[indice];
+  // Num passo de conjunto não há "a solução atual": a decisão é da tabela
+  // inteira, e todo o maquinário de baixo fica em repouso.
+  const atual: LinhaCalculada | undefined = passoAtual?.conjunto
+    ? undefined
+    : passoAtual?.linhas[0];
 
   // Ao trocar de solução, carrega o que já estava decidido.
   useEffect(() => {
@@ -135,7 +243,7 @@ export function EtapaEscolha({
       atual.habilitacao.opcionais.includes(a),
     );
     setMarcados(new Set(opcionaisMarcados));
-    setRecusado(atual.item?.origem === "recusado");
+    setRecusado(atual.item?.origem === 'recusado');
     const creditos = atual.item?.creditosPorAno ?? {};
     setCreditosPorAno(creditos);
     const multiplicadoresIniciais: Partial<Record<AnoEscolarId, string>> = {};
@@ -171,32 +279,22 @@ export function EtapaEscolha({
   // sozinho. Zero é uma escolha válida; ausência não é.
   const precisaEscolherCredito =
     !!atual &&
-    atual.habilitacao.preco.base === "credito" &&
+    atual.habilitacao.preco.base === 'credito' &&
     !recusado &&
     anosAtivos.some((ano) => creditosPorAno[ano] === undefined);
 
   // Licença ajustada manualmente só faz sentido quando o preço é por aluno:
   // em crédito a quantidade já é digitada direto, ano a ano.
-  const permiteLicencas = !!atual && atual.habilitacao.preco.base === "aluno";
+  const permiteLicencas = !!atual && atual.habilitacao.preco.base === 'aluno';
 
   const previsaoEfetiva = useMemo(
-    () =>
-      aplicarLicencas(
-        ctx.previsao,
-        permiteLicencas ? licencas : undefined,
-        anosAtivos,
-      ),
+    () => aplicarLicencas(ctx.previsao, permiteLicencas ? licencas : undefined, anosAtivos),
     [ctx.previsao, permiteLicencas, licencas, anosAtivos],
   );
 
   const previa = useMemo(() => {
     if (!atual) return { alunos: 0, creditos: 0, valorAnual: 0 };
-    return calcularItem(
-      atual.habilitacao.preco,
-      previsaoEfetiva,
-      anosAtivos,
-      creditosPorAno,
-    );
+    return calcularItem(atual.habilitacao.preco, previsaoEfetiva, anosAtivos, creditosPorAno);
   }, [atual, anosAtivos, previsaoEfetiva, creditosPorAno]);
 
   const alunosPrevistos = useMemo(
@@ -206,19 +304,18 @@ export function EtapaEscolha({
   const licencasDivergem = permiteLicencas && previa.alunos !== alunosPrevistos;
 
   const totais = useMemo(() => somarTotais(linhas), [linhas]);
-  const decididas = linhas.filter((l) => l.decidida).length;
 
   // Pra onde ir depois de gravar — índice de outra solução (clique na lista
   // lateral inclusive), a etapa seguinte (mapa) ou a etapa anterior
   // (previsão). null significa "só grava, sem navegar".
-  type Destino = number | "avancar" | "voltar" | null;
+  type Destino = number | 'avancar' | 'voltar' | null;
 
   const gravar = useCallback(
     async (destino: Destino) => {
       const navegar = () => {
         if (destino === null) return;
-        if (typeof destino === "number") setIndice(destino);
-        else if (destino === "avancar") aoAvancar();
+        if (typeof destino === 'number') setIndice(destino);
+        else if (destino === 'avancar') aoAvancar();
         else aoVoltar();
       };
 
@@ -231,7 +328,7 @@ export function EtapaEscolha({
         return;
       }
       if (precisaEscolherCredito) {
-        setErro("Digite a quantidade de cada ano marcado antes de continuar.");
+        setErro('Digite a quantidade de cada ano marcado antes de continuar.');
         return;
       }
       setSalvando(true);
@@ -242,25 +339,20 @@ export function EtapaEscolha({
           pedidoId,
           atual.produto,
           atual.habilitacao,
-          ctx.fornecedores.get(atual.produto.fornecedorId)?.nome ?? "",
+          ctx.fornecedores.get(atual.produto.fornecedorId)?.nome ?? '',
           ctx.previsao,
           {
             anos: [...marcados],
             recusado,
-            creditosPorAno:
-              Object.keys(creditosPorAno).length > 0
-                ? creditosPorAno
-                : undefined,
+            creditosPorAno: Object.keys(creditosPorAno).length > 0 ? creditosPorAno : undefined,
             licencasPorAno:
-              permiteLicencas && Object.keys(licencas).length > 0
-                ? licencas
-                : undefined,
+              permiteLicencas && Object.keys(licencas).length > 0 ? licencas : undefined,
           },
         );
         await aoSalvar();
         navegar();
       } catch {
-        setErro("Não foi possível salvar esta decisão. Tente de novo.");
+        setErro('Não foi possível salvar esta decisão. Tente de novo.');
       } finally {
         setSalvando(false);
       }
@@ -294,7 +386,7 @@ export function EtapaEscolha({
     );
   }
 
-  if (!atual) {
+  if (!passoAtual) {
     return (
       <EstadoVazio
         icone={<span aria-hidden="true">📦</span>}
@@ -304,34 +396,61 @@ export function EtapaEscolha({
     );
   }
 
-  const { produto, habilitacao, bloqueio } = atual;
+  // Passo de conjunto: a decisão é uma tabela de ano × trilha, não a tela de
+  // uma solução. Sai antes de tudo que vem abaixo, que só fala de uma.
+  if (passoAtual.conjunto) {
+    return (
+      <div className="grid gap-5 lg:grid-cols-[264px_1fr]">
+        <BarraJornada
+          passos={passos}
+          indice={indice}
+          desabilitado={salvando}
+          aoIr={(i) => setIndice(i)}
+        />
+        <PainelConjunto
+          ctx={ctx}
+          sessao={sessao}
+          conjunto={passoAtual.conjunto}
+          linhas={passoAtual.linhas}
+          somenteLeitura={somenteLeitura}
+          escritor={escritor}
+          totalGeral={totais.total}
+          ultimo={indice === passos.length - 1}
+          aoVoltar={() => (indice > 0 ? setIndice(indice - 1) : aoVoltar())}
+          aoAvancar={() => (indice < passos.length - 1 ? setIndice(indice + 1) : aoAvancar())}
+          aoSalvar={aoSalvar}
+        />
+      </div>
+    );
+  }
+
+  const { produto, habilitacao, bloqueio } = atual!;
   const fornecedor = ctx.fornecedores.get(produto.fornecedorId);
   const temObrigatorio = habilitacao.obrigatorios.length > 0;
-  const porCredito = habilitacao.preco.base === "credito";
+  const porCredito = habilitacao.preco.base === 'credito';
   const ehRedacao = produto.categoria === CATEGORIA_REDACAO;
   // Cobrança por unidade não conta licença: o número ali é quanta gente a
   // solução alcança, não quanta coisa foi comprada.
-  const rotuloQuantidade =
-    habilitacao.preco.base === "escola" ? "aluno" : "licença";
+  const rotuloQuantidade = habilitacao.preco.base === 'escola' ? 'aluno' : 'licença';
 
   // A categoria Redação troca o vocabulário da tela de crédito: quem compra
   // pensa em redação corrigida por aluno, não em crédito.
   const textosCredito = ehRedacao
     ? {
-        titulo: "Quantas redações corrigidas em cada ano?",
+        titulo: 'Quantas redações corrigidas em cada ano?',
         descricao:
-          "Cada aluno pode ter mais de uma redação corrigida no ano — normalmente mais na 3ª série do médio do que no fundamental. Diga quantas por aluno ou o total do ano: preencher um calcula o outro.",
-        colunaMultiplicador: "por aluno",
-        colunaTotal: "Total de redações no ano",
-        unidade: "redações corrigidas",
+          'Cada aluno pode ter mais de uma redação corrigida no ano — normalmente mais na 3ª série do médio do que no fundamental. Diga quantas por aluno ou o total do ano: preencher um calcula o outro.',
+        colunaMultiplicador: 'por aluno',
+        colunaTotal: 'Total de redações no ano',
+        unidade: 'redações corrigidas',
       }
     : {
-        titulo: "Quantos créditos em cada ano?",
+        titulo: 'Quantos créditos em cada ano?',
         descricao:
-          "Serviço como este pode gastar números diferentes por ano. Diga quantos créditos por aluno ou o total do ano: preencher um calcula o outro.",
-        colunaMultiplicador: "Multiplicador",
-        colunaTotal: "Nº de créditos",
-        unidade: "créditos",
+          'Serviço como este pode gastar números diferentes por ano. Diga quantos créditos por aluno ou o total do ano: preencher um calcula o outro.',
+        colunaMultiplicador: 'Multiplicador',
+        colunaTotal: 'Nº de créditos',
+        unidade: 'créditos',
       };
 
   // Segmentos que a unidade oferta, separados entre os que esta solução
@@ -344,9 +463,7 @@ export function EtapaEscolha({
     .map((seg) => ({
       seg,
       anos: anosDoSegmento(seg.id).filter(
-        (a) =>
-          habilitacao.opcionais.includes(a.id) ||
-          habilitacao.obrigatorios.includes(a.id),
+        (a) => habilitacao.opcionais.includes(a.id) || habilitacao.obrigatorios.includes(a.id),
       ),
     }))
     .filter((s) => s.anos.length > 0);
@@ -356,89 +473,25 @@ export function EtapaEscolha({
 
   return (
     <div className="grid gap-5 lg:grid-cols-[264px_1fr]">
-      {/* A jornada: onde a pessoa está, o que já decidiu, o que falta. */}
-      <Cartao className="h-fit gap-3 p-4">
-        <div className="flex flex-col gap-2 px-1">
-          <span className="font-mono text-[11px] tracking-wider text-gray-500 uppercase">
-            {decididas} de {linhas.length} decididas
-          </span>
-          <BarraProgresso valor={decididas} total={linhas.length} />
-        </div>
+      <BarraJornada
+        passos={passos}
+        indice={indice}
+        desabilitado={salvando}
+        aoIr={(i) => void gravar(i)}
+      />
 
-        <ol className="relative flex flex-col">
-          {/* Trilha contínua ligando os pontos. Fica antes dos botões no DOM
-              e sem z-index: como eles também são `relative`, pintam por cima
-              dela — a linha aparece só no vão entre um ponto e outro. */}
-          <span
-            aria-hidden="true"
-            className="absolute top-4 bottom-4 left-[14px] w-px bg-gray-200"
-          />
-          {linhas.map((l, i) => {
-            const obrigatoria = l.habilitacao.obrigatorios.length > 0;
-            const recusadaAqui = l.item?.origem === "recusado";
-            return (
-              <li key={l.produto.id}>
-                <button
-                  type="button"
-                  disabled={salvando}
-                  onClick={() => void gravar(i)}
-                  aria-current={i === indice ? "step" : undefined}
-                  className={juntar(
-                    "relative flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
-                    i === indice
-                      ? "bg-gray-100 font-medium text-gray-900"
-                      : "text-gray-500 hover:bg-gray-100",
-                  )}
-                >
-                  {/* Travada mostra cadeado, não bolinha: é a única da lista
-                      em que não há decisão a tomar, e forma comunica isso
-                      sem depender de distinguir mais um tom de cinza. */}
-                  {l.bloqueio ? (
-                    <IconeCadeado />
-                  ) : (
-                    <span
-                      aria-hidden="true"
-                      className={juntar(
-                        "h-3 w-3 shrink-0 rounded-full",
-                        obrigatoria
-                          ? "bg-orange-400"
-                          : l.item
-                            ? recusadaAqui
-                              ? "bg-gray-300"
-                              : "bg-green-500"
-                            : "border-2 border-gray-300 bg-white",
-                      )}
-                    />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
-                    {l.produto.nome}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      </Cartao>
-
-      <div className="flex flex-col gap-4">
+      <div className="flex min-w-0 flex-col gap-4">
         {/* Quem é a solução: nome, quem fornece, o que é, quanto custa. */}
         {/* Marca à esquerda, o resto numa coluna só: descrição e preço
             alinham com o nome da solução, não com a borda do cartão. */}
         <Cartao className="flex-row items-start gap-4 p-6">
-          <LogoFornecedor
-            nome={fornecedor?.nome ?? "?"}
-            logo={fornecedor?.logo}
-            tamanho="lg"
-          />
+          <LogoFornecedor nome={fornecedor?.nome ?? '?'} logo={fornecedor?.logo} tamanho="lg" />
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-semibold text-brand">
-                    {produto.nome}
-                  </h2>
+                  <h2 className="text-xl font-semibold text-brand">{produto.nome}</h2>
                   {/* Travada não é "opcional": dizer opcional ao lado de
                       "depende de outra contratação" faz o leitor parar pra
                       resolver a contradição. */}
@@ -451,10 +504,8 @@ export function EtapaEscolha({
                   )}
                 </div>
                 <span className="text-sm text-gray-500">
-                  Fornecido por:{" "}
-                  <span className="font-medium text-gray-700">
-                    {fornecedor?.nome ?? "—"}
-                  </span>
+                  Fornecido por:{' '}
+                  <span className="font-medium text-gray-700">{fornecedor?.nome ?? '—'}</span>
                 </span>
               </div>
 
@@ -473,20 +524,17 @@ export function EtapaEscolha({
             </div>
 
             {produto.descricao && (
-              <p className="max-w-prose text-sm text-gray-500">
-                {produto.descricao}
-              </p>
+              <p className="max-w-prose text-sm text-gray-500">{produto.descricao}</p>
             )}
 
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
               <span className="rounded-lg bg-gray-100 px-3 py-1.5 font-mono text-xs text-brand">
                 {descreverPreco(habilitacao.preco)}
               </span>
-              {ctx.unidade.tipo === "social" &&
-                produto.precoSocialHabilitado && (
-                  <Selo tom="ok">preço social da sua unidade</Selo>
-                )}
-              {habilitacao.preco.base === "escola" && (
+              {ctx.unidade.tipo === 'social' && produto.precoSocialHabilitado && (
+                <Selo tom="ok">preço social da sua unidade</Selo>
+              )}
+              {habilitacao.preco.base === 'escola' && (
                 <span className="text-xs text-gray-500">
                   Cobrança por unidade: marcar mais anos não altera o valor.
                 </span>
@@ -497,10 +545,9 @@ export function EtapaEscolha({
 
         {temObrigatorio && !bloqueio && (
           <p className="rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-800">
-            Obrigatória para{" "}
-            {habilitacao.obrigatorios.length === 1 ? "o ano" : "os anos"}{" "}
-            {habilitacao.obrigatorios.map((a) => anoEscolar(a).nome).join(", ")}{" "}
-            — já entra no pedido e não pode ser removida por aqui.
+            Obrigatória para {habilitacao.obrigatorios.length === 1 ? 'o ano' : 'os anos'}{' '}
+            {habilitacao.obrigatorios.map((a) => anoEscolar(a).nome).join(', ')} — já entra no
+            pedido e não pode ser removida por aqui.
           </p>
         )}
 
@@ -520,17 +567,11 @@ export function EtapaEscolha({
                 bloqueio,
                 (id: string) => ctx.modelos.find((m) => m.id === id)?.nome,
                 (id: string) => ctx.produtos.find((pr) => pr.id === id)?.nome,
-              )}{" "}
-              Enquanto isso, não há o que decidir aqui — e ela não segura o
-              envio do pedido.
+              )}{' '}
+              Enquanto isso, não há o que decidir aqui — e ela não segura o envio do pedido.
             </p>
             {bloqueio.modelos.length > 0 && (
-              <Botao
-                variante="secundario"
-                tamanho="sm"
-                className="w-fit"
-                onClick={aoVoltar}
-              >
+              <Botao variante="secundario" tamanho="sm" className="w-fit" onClick={aoVoltar}>
                 Ver os modelos
               </Botao>
             )}
@@ -549,9 +590,9 @@ export function EtapaEscolha({
                   Em quais anos você quer contratar em {ctx.ciclo.anoAlvo}?
                 </h3>
                 <span className="font-mono text-xs text-gray-500 tabular-nums">
-                  {anosAtivos.length} ano{anosAtivos.length === 1 ? "" : "s"} ·{" "}
-                  {previa.alunos} {rotuloQuantidade}
-                  {previa.alunos === 1 ? "" : "s"}
+                  {anosAtivos.length} ano{anosAtivos.length === 1 ? '' : 's'} · {previa.alunos}{' '}
+                  {rotuloQuantidade}
+                  {previa.alunos === 1 ? '' : 's'}
                 </span>
               </div>
 
@@ -576,9 +617,7 @@ export function EtapaEscolha({
                       </span>
                       <div className="flex flex-wrap items-center gap-2">
                         {anosSeg.map((ano) => {
-                          const travado = habilitacao.obrigatorios.includes(
-                            ano.id,
-                          );
+                          const travado = habilitacao.obrigatorios.includes(ano.id);
                           const ligado = travado || marcados.has(ano.id);
                           return (
                             <button
@@ -595,34 +634,34 @@ export function EtapaEscolha({
                                 })
                               }
                               className={juntar(
-                                "flex min-w-[3.5rem] flex-col items-center gap-0.5 rounded-xl border px-3 py-2 transition-all duration-150",
+                                'flex min-w-[3.5rem] flex-col items-center gap-0.5 rounded-xl border px-3 py-2 transition-all duration-150',
                                 travado
-                                  ? "cursor-default border-orange-300 bg-orange-100"
+                                  ? 'cursor-default border-orange-300 bg-orange-100'
                                   : ligado
-                                    ? "border-brand-medium bg-brand-medium shadow-sm"
-                                    : "border-gray-200 bg-white hover:-translate-y-px hover:border-gray-300 hover:shadow-sm",
+                                    ? 'border-brand-medium bg-brand-medium shadow-sm'
+                                    : 'border-gray-200 bg-white hover:-translate-y-px hover:border-gray-300 hover:shadow-sm',
                               )}
                             >
                               <span
                                 className={juntar(
-                                  "text-sm font-medium",
+                                  'text-sm font-medium',
                                   travado
-                                    ? "text-orange-800"
+                                    ? 'text-orange-800'
                                     : ligado
-                                      ? "text-white"
-                                      : "text-gray-700",
+                                      ? 'text-white'
+                                      : 'text-gray-700',
                                 )}
                               >
                                 {ano.curto}
                               </span>
                               <span
                                 className={juntar(
-                                  "font-mono text-[10px] tabular-nums",
+                                  'font-mono text-[10px] tabular-nums',
                                   travado
-                                    ? "text-orange-700/80"
+                                    ? 'text-orange-700/80'
                                     : ligado
-                                      ? "text-white/75"
-                                      : "text-gray-400",
+                                      ? 'text-white/75'
+                                      : 'text-gray-400',
                                 )}
                               >
                                 {ctx.previsao[ano.id] ?? 0}
@@ -646,9 +685,7 @@ export function EtapaEscolha({
                             }
                             className="rounded-lg px-2 py-1.5 text-xs font-medium text-brand-medium transition-colors hover:bg-gray-100"
                           >
-                            {todosMarcados
-                              ? "limpar segmento"
-                              : "todo o segmento"}
+                            {todosMarcados ? 'limpar segmento' : 'todo o segmento'}
                           </button>
                         )}
                       </div>
@@ -659,8 +696,7 @@ export function EtapaEscolha({
 
               {segmentosDeFora.length > 0 && (
                 <p className="border-t border-gray-100 px-6 py-3 text-xs text-gray-400">
-                  Não disponível para{" "}
-                  {segmentosDeFora.map((s) => s.nome).join(", ")}.
+                  Não disponível para {segmentosDeFora.map((s) => s.nome).join(', ')}.
                 </p>
               )}
             </Cartao>
@@ -669,27 +705,16 @@ export function EtapaEscolha({
             {porCredito && !recusado && anosAtivos.length > 0 && (
               <Cartao className="gap-0 p-0">
                 <div className="flex flex-col gap-1 border-b border-gray-200 px-6 py-4">
-                  <h3 className="text-sm font-semibold text-gray-700">
-                    {textosCredito.titulo}
-                  </h3>
-                  <p className="max-w-prose text-xs text-gray-500">
-                    {textosCredito.descricao}
-                  </p>
+                  <h3 className="text-sm font-semibold text-gray-700">{textosCredito.titulo}</h3>
+                  <p className="max-w-prose text-xs text-gray-500">{textosCredito.descricao}</p>
                 </div>
 
-                <fieldset
-                  disabled={somenteLeitura}
-                  className="px-6 py-2 disabled:opacity-50"
-                >
+                <fieldset disabled={somenteLeitura} className="px-6 py-2 disabled:opacity-50">
                   <table className="w-full table-fixed border-collapse text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 text-xs text-gray-500">
-                        <th className="w-[30%] py-2 pr-2 text-left font-medium">
-                          Ano escolar
-                        </th>
-                        <th className="w-[18%] px-2 py-2 text-right font-medium">
-                          Nº de alunos
-                        </th>
+                        <th className="w-[30%] py-2 pr-2 text-left font-medium">Ano escolar</th>
+                        <th className="w-[18%] px-2 py-2 text-right font-medium">Nº de alunos</th>
                         <th className="w-[22%] px-2 py-2 text-center font-medium">
                           {textosCredito.colunaMultiplicador}
                         </th>
@@ -702,13 +727,10 @@ export function EtapaEscolha({
                       {anosAtivos.map((ano) => {
                         const previsaoAno = ctx.previsao[ano] ?? 0;
                         const valor = creditosPorAno[ano];
-                        const textoMultiplicador = multiplicadores[ano] ?? "";
+                        const textoMultiplicador = multiplicadores[ano] ?? '';
 
                         return (
-                          <tr
-                            key={ano}
-                            className="border-b border-gray-100 last:border-b-0"
-                          >
+                          <tr key={ano} className="border-b border-gray-100 last:border-b-0">
                             <td className="py-2 pr-2 text-sm text-gray-700">
                               {anoEscolar(ano).nome}
                             </td>
@@ -736,10 +758,7 @@ export function EtapaEscolha({
                                     if (n !== null && previsaoAno > 0) {
                                       setCreditosPorAno((c) => ({
                                         ...c,
-                                        [ano]: Math.max(
-                                          0,
-                                          Math.round(previsaoAno * n),
-                                        ),
+                                        [ano]: Math.max(0, Math.round(previsaoAno * n)),
                                       }));
                                     }
                                   }}
@@ -754,11 +773,11 @@ export function EtapaEscolha({
                                   type="number"
                                   min={0}
                                   inputMode="numeric"
-                                  value={valor ?? ""}
+                                  value={valor ?? ''}
                                   placeholder="—"
                                   onChange={(e) => {
                                     const texto = e.target.value;
-                                    if (texto === "") {
+                                    if (texto === '') {
                                       setCreditosPorAno((c) => {
                                         const copia = { ...c };
                                         delete copia[ano];
@@ -783,10 +802,7 @@ export function EtapaEscolha({
                                     }));
                                     setMultiplicadores((m) => ({
                                       ...m,
-                                      [ano]: textoDoMultiplicador(
-                                        limpo,
-                                        previsaoAno,
-                                      ),
+                                      [ano]: textoDoMultiplicador(limpo, previsaoAno),
                                     }));
                                   }}
                                   className="py-1.5 text-right"
@@ -803,16 +819,13 @@ export function EtapaEscolha({
 
                 <div className="flex flex-wrap items-baseline gap-x-2 border-t border-gray-200 px-6 py-3">
                   <span className="text-sm font-medium text-gray-700">
-                    Total:{" "}
-                    <span className="font-mono tabular-nums">
-                      {previa.creditos}
-                    </span>{" "}
+                    Total: <span className="font-mono tabular-nums">{previa.creditos}</span>{' '}
                     {textosCredito.unidade}
                   </span>
                   {ehRedacao && (
                     <span className="text-xs text-gray-500">
                       — {previa.creditos} crédito
-                      {previa.creditos === 1 ? "" : "s"} nesta solução
+                      {previa.creditos === 1 ? '' : 's'} nesta solução
                     </span>
                   )}
                 </div>
@@ -828,40 +841,28 @@ export function EtapaEscolha({
                   aria-expanded={ajustarLicencas}
                   className="flex flex-wrap items-center gap-2 px-6 py-4 text-left text-sm font-semibold text-gray-700"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="w-3 text-xs text-gray-400"
-                  >
-                    {ajustarLicencas ? "▾" : "▸"}
+                  <span aria-hidden="true" className="w-3 text-xs text-gray-400">
+                    {ajustarLicencas ? '▾' : '▸'}
                   </span>
                   Ajustar quantidade de licenças
-                  {licencasDivergem && (
-                    <Selo tom="atencao">diferente da previsão</Selo>
-                  )}
+                  {licencasDivergem && <Selo tom="atencao">diferente da previsão</Selo>}
                 </button>
 
                 {ajustarLicencas && (
                   <div className="flex flex-col gap-3 border-t border-gray-200 px-6 py-4">
                     <p className="max-w-prose text-xs text-gray-500">
-                      Por padrão a quantidade de licenças segue a previsão de
-                      alunos. Mude aqui só se esta solução cobrir menos — ou
-                      mais — alunos do que o total matriculado no ano.
+                      Por padrão a quantidade de licenças segue a previsão de alunos. Mude aqui só
+                      se esta solução cobrir menos — ou mais — alunos do que o total matriculado no
+                      ano.
                     </p>
-                    <fieldset
-                      disabled={somenteLeitura}
-                      className="flex flex-col gap-2.5"
-                    >
+                    <fieldset disabled={somenteLeitura} className="flex flex-col gap-2.5">
                       {anosAtivos.map((ano) => {
                         const previsaoAno = ctx.previsao[ano] ?? 0;
                         const valor = licencas[ano] ?? previsaoAno;
                         const divergente =
-                          licencas[ano] !== undefined &&
-                          licencas[ano] !== previsaoAno;
+                          licencas[ano] !== undefined && licencas[ano] !== previsaoAno;
                         return (
-                          <div
-                            key={ano}
-                            className="flex flex-wrap items-center gap-2.5"
-                          >
+                          <div key={ano} className="flex flex-wrap items-center gap-2.5">
                             <span className="w-28 shrink-0 text-sm text-gray-600">
                               {anoEscolar(ano).nome}
                             </span>
@@ -873,9 +874,7 @@ export function EtapaEscolha({
                                 value={valor}
                                 onChange={(e) => {
                                   const n = Number(e.target.value);
-                                  const limpo = Number.isFinite(n)
-                                    ? Math.max(0, Math.round(n))
-                                    : 0;
+                                  const limpo = Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
                                   setLicencas((l) => ({ ...l, [ano]: limpo }));
                                 }}
                                 className="py-1.5"
@@ -911,20 +910,19 @@ export function EtapaEscolha({
 
             {licencasDivergem && (
               <p className="rounded-lg bg-amber-100 px-4 py-3 text-sm text-amber-800">
-                Você está contratando licenças para{" "}
-                <strong>{previa.alunos}</strong> aluno
-                {previa.alunos === 1 ? "" : "s"} — a previsão para os anos
-                marcados soma <strong>{alunosPrevistos}</strong>.
+                Você está contratando licenças para <strong>{previa.alunos}</strong> aluno
+                {previa.alunos === 1 ? '' : 's'} — a previsão para os anos marcados soma{' '}
+                <strong>{alunosPrevistos}</strong>.
               </p>
             )}
 
             {!temObrigatorio && !somenteLeitura && (
               <label
                 className={juntar(
-                  "flex items-center gap-2.5 rounded-xl border border-dashed p-4 text-sm transition-colors",
+                  'flex items-center gap-2.5 rounded-xl border border-dashed p-4 text-sm transition-colors',
                   recusado
-                    ? "border-gray-400 bg-gray-100 text-gray-700"
-                    : "border-gray-300 text-gray-600 hover:border-gray-400",
+                    ? 'border-gray-400 bg-gray-100 text-gray-700'
+                    : 'border-gray-300 text-gray-600 hover:border-gray-400',
                 )}
               >
                 <input
@@ -943,10 +941,7 @@ export function EtapaEscolha({
         )}
 
         {erro && (
-          <p
-            role="alert"
-            className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800"
-          >
+          <p role="alert" className="rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800">
             {erro}
           </p>
         )}
@@ -956,9 +951,7 @@ export function EtapaEscolha({
             <span className="text-xs tracking-wide text-gray-500 uppercase">
               {rotuloQuantidade}s
             </span>
-            <span className="font-mono text-sm font-medium tabular-nums">
-              {previa.alunos}
-            </span>
+            <span className="font-mono text-sm font-medium tabular-nums">{previa.alunos}</span>
           </div>
           <div className="flex flex-col">
             <span className="text-xs tracking-wide text-gray-500 uppercase">
@@ -969,9 +962,7 @@ export function EtapaEscolha({
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs tracking-wide text-gray-500 uppercase">
-              Total até aqui
-            </span>
+            <span className="text-xs tracking-wide text-gray-500 uppercase">Total até aqui</span>
             <span className="font-mono text-base font-semibold text-brand tabular-nums">
               {formatarBRL(totais.total)}
             </span>
@@ -982,7 +973,7 @@ export function EtapaEscolha({
           <Botao
             variante="secundario"
             carregando={salvando}
-            onClick={() => void gravar(indice > 0 ? indice - 1 : "voltar")}
+            onClick={() => void gravar(indice > 0 ? indice - 1 : 'voltar')}
           >
             Voltar
           </Botao>
@@ -992,11 +983,9 @@ export function EtapaEscolha({
             <Botao
               carregando={salvando}
               disabled={precisaEscolherCredito}
-              onClick={() =>
-                void gravar(indice < linhas.length - 1 ? indice + 1 : "avancar")
-              }
+              onClick={() => void gravar(indice < passos.length - 1 ? indice + 1 : 'avancar')}
             >
-              {indice < linhas.length - 1 ? "Próxima solução" : "Ver o mapa"}
+              {indice < passos.length - 1 ? 'Próxima solução' : 'Ver o mapa'}
             </Botao>
           )}
         </Cartao>

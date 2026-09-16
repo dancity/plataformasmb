@@ -1,4 +1,6 @@
-import type { Produto } from './tipos';
+import type { AnoEscolarId } from './anosEscolares';
+import { ordenarAnos } from './anosEscolares';
+import type { Conjunto, Produto } from './tipos';
 
 /**
  * Vínculos entre soluções — o que uma decisão faz com as outras.
@@ -75,4 +77,52 @@ export function descreverBloqueio(
   if (nomes.length === 0) return 'Depende de um item que saiu do catálogo. Fale com a regional.';
   if (nomes.length === 1) return `Disponível para quem contrata ${nomes[0]}.`;
   return `Disponível para quem contrata ${nomes.slice(0, -1).join(', ')} ou ${nomes.at(-1)}.`;
+}
+
+// ─── Conjunto de escolha única por ano ───────────────────────────
+
+/** O que a unidade marcou dentro de um conjunto: anos por solução. */
+export type SelecaoConjunto = ReadonlyMap<string, ReadonlySet<AnoEscolarId>>;
+
+/** Um ano escolar disputado por mais de uma solução do conjunto. */
+export interface Conflito {
+  ano: AnoEscolarId;
+  produtoIds: string[];
+}
+
+/**
+ * Anos em que o conjunto foi marcado mais de uma vez.
+ *
+ * A tabela do gestor é de rádio por linha, então isso não acontece por
+ * clique. Acontece quando o cadastro muda embaixo de uma escolha já feita:
+ * duas soluções soltas que a unidade contratou no mesmo ano viram membros
+ * do mesmo conjunto depois. Por isso o conflito é detectado e mostrado, não
+ * resolvido em silêncio — escolher qual fica é decisão da unidade, e o
+ * dinheiro é diferente em cada uma.
+ */
+export function conflitosDoConjunto(
+  conjunto: Conjunto,
+  selecao: SelecaoConjunto,
+): Conflito[] {
+  const porAno = new Map<AnoEscolarId, string[]>();
+  for (const produtoId of conjunto.produtoIds) {
+    for (const ano of selecao.get(produtoId) ?? []) {
+      porAno.set(ano, [...(porAno.get(ano) ?? []), produtoId]);
+    }
+  }
+  return ordenarAnos([...porAno.keys()])
+    .filter((ano) => (porAno.get(ano)?.length ?? 0) > 1)
+    .map((ano) => ({ ano, produtoIds: porAno.get(ano)! }));
+}
+
+/** Qual solução do conjunto ficou com este ano, se alguma. */
+export function escolhidoNoAno(
+  conjunto: Conjunto,
+  selecao: SelecaoConjunto,
+  ano: AnoEscolarId,
+): string | undefined {
+  const marcados = conjunto.produtoIds.filter((id) => selecao.get(id)?.has(ano));
+  // Em conflito ninguém "ganhou": devolver o primeiro faria a tela mostrar
+  // uma escolha que a unidade não fez.
+  return marcados.length === 1 ? marcados[0] : undefined;
 }

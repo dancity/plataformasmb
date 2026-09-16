@@ -11,6 +11,7 @@ import { LayoutAdmin } from '@/paginas/admin/LayoutAdmin';
 import { PainelAdmin } from '@/paginas/admin/PainelAdmin';
 import { Solucoes } from '@/paginas/admin/Solucoes';
 import { SolucaoForm } from '@/paginas/admin/SolucaoForm';
+import { Conjuntos } from '@/paginas/admin/Conjuntos';
 import { Modelos } from '@/paginas/admin/Modelos';
 import { ModeloForm } from '@/paginas/admin/ModeloForm';
 import { Fornecedores } from '@/paginas/admin/Fornecedores';
@@ -87,6 +88,7 @@ export function App() {
         <Route path="solucoes" element={<Solucoes />} />
         <Route path="solucoes/novo" element={<SolucaoForm />} />
         <Route path="solucoes/:produtoId/editar" element={<SolucaoForm />} />
+        <Route path="conjuntos" element={<Conjuntos />} />
         <Route path="modelos" element={<Modelos />} />
         <Route path="modelos/novo" element={<ModeloForm />} />
         <Route path="modelos/:modeloId/editar" element={<ModeloForm />} />

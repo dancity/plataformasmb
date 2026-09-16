@@ -54,6 +54,20 @@ conversão (relatório primeiro, `--gravar` depois).
 O que varia por unidade é só a previsão de alunos: ano que a unidade não
 oferta não aparece na escolha, mesmo habilitado no catálogo.
 
+**Vínculo entre soluções mora em `dominio/vinculos.ts`.** Duas regras, e as
+duas valem nos dois lados — o app trava a tela, o `enviarPedido` garante:
+
+- *pré-requisito* (`produto.requer`): a solução só é contratável por quem já
+  levou **um** dos modelos ou soluções listados. Não atendido, ela aparece
+  travada com o motivo, não vira pendência, e o servidor apaga o item.
+- *conjunto* (coleção `conjuntos`): soluções que competem entre si, no máximo
+  uma por ano escolar. Viram um passo só na etapa 3, numa tabela ano ×
+  trilha. Conflito não é resolvido em silêncio: o preço de cada trilha é
+  diferente, e escolher é da unidade.
+
+Fica separado de `habilitacao.ts` de propósito: aquele resolve catálogo e não
+depende de escolha nenhuma; isto só existe com o pedido em mãos.
+
 **Modo escuro por inversão de variável.** `src/tema-escuro.css` redefine os
 tokens; nenhum componente usa `dark:`. Tela nova nasce com os dois temas.
 Espaçamento sai sempre de `gap` de flex/grid, nunca de margem avulsa.

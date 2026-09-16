@@ -9,18 +9,19 @@ import {
   setDoc,
   where,
   writeBatch,
-} from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import type { AnoEscolarId, PrevisaoPorAno } from "@dominio/anosEscolares";
-import { aplicarLicencas } from "@dominio/anosEscolares";
-import { calcularItem } from "@dominio/preco";
-import { anosEfetivos, resolverHabilitacao } from "@dominio/habilitacao";
-import { bloqueioDe } from "@dominio/vinculos";
-import type { Bloqueio, EstadoContratacao } from "@dominio/vinculos";
-import type { HabilitacaoResolvida } from "@dominio/habilitacao";
+} from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import type { AnoEscolarId, PrevisaoPorAno } from '@dominio/anosEscolares';
+import { aplicarLicencas } from '@dominio/anosEscolares';
+import { calcularItem } from '@dominio/preco';
+import { anosEfetivos, resolverHabilitacao } from '@dominio/habilitacao';
+import { bloqueioDe } from '@dominio/vinculos';
+import type { Bloqueio, EstadoContratacao } from '@dominio/vinculos';
+import type { HabilitacaoResolvida } from '@dominio/habilitacao';
 import type {
   Centavos,
   Ciclo,
+  Conjunto,
   Fornecedor,
   ItemPedido,
   Matricula,
@@ -28,10 +29,10 @@ import type {
   Pedido,
   Produto,
   Unidade,
-} from "@dominio/tipos";
-import { paraModelo } from "./dados";
-import { db, functions } from "./firebase";
-import type { Sessao } from "./auth";
+} from '@dominio/tipos';
+import { paraModelo } from './dados';
+import { db, functions } from './firebase';
+import type { Sessao } from './auth';
 
 /**
  * Dados do fluxo do gestor.
@@ -51,6 +52,8 @@ export interface ContextoPedido {
   /** Publicados do ciclo. A etapa 2 os oferece, e a 3 precisa dos nomes para
    *  dizer de qual deles uma solução travada depende. */
   modelos: Modelo[];
+  /** Publicados do ciclo: soluções que competem entre si por ano escolar. */
+  conjuntos: Conjunto[];
   /** Cadastro inteiro, não só o nome: a marca do fornecedor entra nos cards
    *  da etapa de escolha, e ela vem na mesma leitura. */
   fornecedores: Map<string, Fornecedor>;
@@ -68,16 +71,12 @@ export function idMatricula(cicloId: string, unidadeId: string): string {
 
 /** O ciclo corrente: o mais recente que estiver aberto, senão o mais recente. */
 export async function cicloCorrente(): Promise<Ciclo | null> {
-  const snap = await getDocs(
-    query(collection(db, "ciclos"), orderBy("anoAlvo", "desc")),
-  );
+  const snap = await getDocs(query(collection(db, 'ciclos'), orderBy('anoAlvo', 'desc')));
   const ciclos = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Ciclo);
-  return ciclos.find((c) => c.estado === "aberto") ?? ciclos[0] ?? null;
+  return ciclos.find((c) => c.estado === 'aberto') ?? ciclos[0] ?? null;
 }
 
-export async function carregarContexto(
-  sessao: Sessao,
-): Promise<ContextoPedido | null> {
+export async function carregarContexto(sessao: Sessao): Promise<ContextoPedido | null> {
   if (!sessao.unidadeId || !sessao.regionalId) return null;
 
   const ciclo = await cicloCorrente();
@@ -90,47 +89,49 @@ export async function carregarContexto(
     matriculaDoc,
     produtosSnap,
     modelosSnap,
+    conjuntosSnap,
     fornecedoresSnap,
     pedidoDoc,
   ] = await Promise.all([
-    getDoc(doc(db, "unidades", sessao.unidadeId)),
-    getDoc(doc(db, "matriculas", idMatricula(ciclo.id, sessao.unidadeId))),
+    getDoc(doc(db, 'unidades', sessao.unidadeId)),
+    getDoc(doc(db, 'matriculas', idMatricula(ciclo.id, sessao.unidadeId))),
     getDocs(
       query(
-        collection(db, "produtos"),
-        where("cicloId", "==", ciclo.id),
-        where("visibilidade", "==", "publicado"),
-        orderBy("ordem"),
+        collection(db, 'produtos'),
+        where('cicloId', '==', ciclo.id),
+        where('visibilidade', '==', 'publicado'),
+        orderBy('ordem'),
       ),
     ),
     getDocs(
       query(
-        collection(db, "modelos"),
-        where("cicloId", "==", ciclo.id),
-        where("visibilidade", "==", "publicado"),
-        orderBy("nome"),
+        collection(db, 'modelos'),
+        where('cicloId', '==', ciclo.id),
+        where('visibilidade', '==', 'publicado'),
+        orderBy('nome'),
       ),
     ),
-    getDocs(collection(db, "fornecedores")),
-    getDoc(doc(db, "pedidos", idPedido(ciclo.id, sessao.unidadeId))),
+    getDocs(
+      query(
+        collection(db, 'conjuntos'),
+        where('cicloId', '==', ciclo.id),
+        where('visibilidade', '==', 'publicado'),
+        orderBy('nome'),
+      ),
+    ),
+    getDocs(collection(db, 'fornecedores')),
+    getDoc(doc(db, 'pedidos', idPedido(ciclo.id, sessao.unidadeId))),
   ]);
 
   if (!unidadeDoc.exists()) return null;
 
-  const matricula = matriculaDoc.exists()
-    ? (matriculaDoc.data() as Matricula)
-    : null;
-  const pedido = pedidoDoc.exists()
-    ? ({ id: pedidoDoc.id, ...pedidoDoc.data() } as Pedido)
-    : null;
+  const matricula = matriculaDoc.exists() ? (matriculaDoc.data() as Matricula) : null;
+  const pedido = pedidoDoc.exists() ? ({ id: pedidoDoc.id, ...pedidoDoc.data() } as Pedido) : null;
 
   const itens = new Map<string, ItemPedido>();
   if (pedido) {
-    const itensSnap = await getDocs(
-      collection(db, "pedidos", pedido.id, "itens"),
-    );
-    for (const d of itensSnap.docs)
-      itens.set(d.id, { id: d.id, ...d.data() } as ItemPedido);
+    const itensSnap = await getDocs(collection(db, 'pedidos', pedido.id, 'itens'));
+    for (const d of itensSnap.docs) itens.set(d.id, { id: d.id, ...d.data() } as ItemPedido);
   }
 
   return {
@@ -138,15 +139,11 @@ export async function carregarContexto(
     unidade: { id: unidadeDoc.id, ...unidadeDoc.data() } as Unidade,
     previsao: matricula?.porAno ?? {},
     previsaoConfirmada: !!matricula?.confirmadaEm,
-    produtos: produtosSnap.docs.map(
-      (d) => ({ id: d.id, ...d.data() }) as Produto,
-    ),
+    produtos: produtosSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Produto),
     modelos: modelosSnap.docs.map((d) => paraModelo(d.id, d.data())),
+    conjuntos: conjuntosSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Conjunto),
     fornecedores: new Map(
-      fornecedoresSnap.docs.map((d) => [
-        d.id,
-        { id: d.id, ...d.data() } as Fornecedor,
-      ]),
+      fornecedoresSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() } as Fornecedor]),
     ),
     pedido,
     itens,
@@ -160,8 +157,7 @@ export async function carregarContexto(
 export function limparPrevisao(porAno: PrevisaoPorAno): PrevisaoPorAno {
   const limpo: PrevisaoPorAno = {};
   for (const [ano, n] of Object.entries(porAno)) {
-    if (typeof n === "number" && n > 0)
-      limpo[ano as AnoEscolarId] = Math.round(n);
+    if (typeof n === 'number' && n > 0) limpo[ano as AnoEscolarId] = Math.round(n);
   }
   return limpo;
 }
@@ -175,13 +171,13 @@ export async function salvarPrevisao(
   const limpo = limparPrevisao(porAno);
 
   await setDoc(
-    doc(db, "matriculas", idMatricula(ciclo.id, sessao.unidadeId!)),
+    doc(db, 'matriculas', idMatricula(ciclo.id, sessao.unidadeId!)),
     {
       cicloId: ciclo.id,
       unidadeId: sessao.unidadeId,
       regionalId: sessao.regionalId,
       porAno: limpo,
-      origem: "gestor",
+      origem: 'gestor',
       atualizadoPor: sessao.uid,
       atualizadoEm: new Date().toISOString(),
       ...(confirmar ? { confirmadaEm: new Date().toISOString() } : {}),
@@ -193,20 +189,17 @@ export async function salvarPrevisao(
 // ─── Etapa 3: escolha ────────────────────────────────────────────
 
 /** Abre o rascunho, se ainda não existir. Idempotente. */
-export async function abrirRascunho(
-  ciclo: Ciclo,
-  sessao: Sessao,
-): Promise<string> {
+export async function abrirRascunho(ciclo: Ciclo, sessao: Sessao): Promise<string> {
   const id = idPedido(ciclo.id, sessao.unidadeId!);
-  const existente = await getDoc(doc(db, "pedidos", id));
+  const existente = await getDoc(doc(db, 'pedidos', id));
   if (existente.exists()) return id;
 
-  await setDoc(doc(db, "pedidos", id), {
+  await setDoc(doc(db, 'pedidos', id), {
     cicloId: ciclo.id,
     unidadeId: sessao.unidadeId,
     regionalId: sessao.regionalId,
     solicitante: { uid: sessao.uid, nome: sessao.nome, email: sessao.email },
-    estado: "rascunho",
+    estado: 'rascunho',
     versao: 1,
     totais: { obrigatorio: 0, opcional: 0, total: 0 },
     criadoEm: new Date().toISOString(),
@@ -246,11 +239,7 @@ export function computarItem(
   const anos = decisao.recusado
     ? habilitacao.obrigatorios
     : anosEfetivos(habilitacao, decisao.anos);
-  const previsaoEfetiva = aplicarLicencas(
-    previsao,
-    decisao.licencasPorAno,
-    anos,
-  );
+  const previsaoEfetiva = aplicarLicencas(previsao, decisao.licencasPorAno, anos);
   const { alunos, valorAnual } = calcularItem(
     habilitacao.preco,
     previsaoEfetiva,
@@ -274,13 +263,13 @@ export function computarItem(
     valorAnual,
     origem:
       anos.length === 0
-        ? "recusado"
+        ? 'recusado'
         : habilitacao.obrigatorios.length > 0
-          ? "obrigatorio"
-          : "escolha",
-    decisao: "pendente",
+          ? 'obrigatorio'
+          : 'escolha',
+    decisao: 'pendente',
     atualizadoEm: new Date().toISOString(),
-    ...(habilitacao.preco.base === "credito" && decisao.creditosPorAno
+    ...(habilitacao.preco.base === 'credito' && decisao.creditosPorAno
       ? { creditosPorAno: decisao.creditosPorAno }
       : {}),
     ...(origemModelo
@@ -302,23 +291,14 @@ export async function salvarDecisao(
   previsao: PrevisaoPorAno,
   decisao: DecisaoLocal,
 ): Promise<ItemPedido> {
-  const item = computarItem(
-    produto,
-    habilitacao,
-    fornecedorNome,
-    previsao,
-    decisao,
-  );
+  const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao);
   const { id: _id, ...semId } = item;
-  await setDoc(doc(db, "pedidos", pedidoId, "itens", produto.id), semId);
+  await setDoc(doc(db, 'pedidos', pedidoId, 'itens', produto.id), semId);
   return item;
 }
 
-export async function apagarDecisao(
-  pedidoId: string,
-  produtoId: string,
-): Promise<void> {
-  await deleteDoc(doc(db, "pedidos", pedidoId, "itens", produtoId));
+export async function apagarDecisao(pedidoId: string, produtoId: string): Promise<void> {
+  await deleteDoc(doc(db, 'pedidos', pedidoId, 'itens', produtoId));
 }
 
 // ─── Cálculo de tela ─────────────────────────────────────────────
@@ -352,15 +332,11 @@ export function estadoDaContratacao(ctx: ContextoPedido): EstadoContratacao {
 
 /** Resolve habilitação e valor de todas as soluções de uma vez. */
 export function calcularLinhas(ctx: ContextoPedido): LinhaCalculada[] {
-  const unidadeSocial = ctx.unidade.tipo === "social";
+  const unidadeSocial = ctx.unidade.tipo === 'social';
   const estado = estadoDaContratacao(ctx);
   return ctx.produtos
     .map((produto) => {
-      const habilitacao = resolverHabilitacao(
-        produto,
-        ctx.previsao,
-        unidadeSocial,
-      );
+      const habilitacao = resolverHabilitacao(produto, ctx.previsao, unidadeSocial);
       const item = ctx.itens.get(produto.id);
       const obrigatoria = habilitacao.obrigatorios.length > 0;
       const bloqueio = bloqueioDe(produto, estado);
@@ -431,9 +407,7 @@ export function resolverItensDoModelo(
   for (const itemModelo of modelo.itens) {
     const linha = porId.get(itemModelo.produtoId);
     if (!linha || !linha.habilitacao.disponivel) {
-      indisponiveis.push(
-        nomePorId.get(itemModelo.produtoId) ?? itemModelo.produtoId,
-      );
+      indisponiveis.push(nomePorId.get(itemModelo.produtoId) ?? itemModelo.produtoId);
       continue;
     }
 
@@ -452,11 +426,9 @@ export function resolverItensDoModelo(
       // Cobrança por crédito não tem valor padrão no catálogo — 1 crédito
       // por aluno é o ponto de partida mais neutro, e cada ano segue
       // livremente editável depois de aplicar o modelo.
-      ...(linha.habilitacao.preco.base === "credito"
+      ...(linha.habilitacao.preco.base === 'credito'
         ? {
-            creditosPorAno: Object.fromEntries(
-              anos.map((ano) => [ano, ctx.previsao[ano] ?? 0]),
-            ),
+            creditosPorAno: Object.fromEntries(anos.map((ano) => [ano, ctx.previsao[ano] ?? 0])),
           }
         : {}),
     };
@@ -464,8 +436,7 @@ export function resolverItensDoModelo(
     itens.push({
       produto: linha.produto,
       habilitacao: linha.habilitacao,
-      fornecedorNome:
-        ctx.fornecedores.get(linha.produto.fornecedorId)?.nome ?? "",
+      fornecedorNome: ctx.fornecedores.get(linha.produto.fornecedorId)?.nome ?? '',
       previsao: ctx.previsao,
       decisao,
     });
@@ -483,32 +454,19 @@ export function resolverItensDoModelo(
 export async function aplicarModelo(
   ciclo: Ciclo,
   sessao: Sessao,
-  modelo: Pick<Modelo, "id" | "nome">,
+  modelo: Pick<Modelo, 'id' | 'nome'>,
   itens: readonly ItemParaAplicar[],
 ): Promise<ItemPedido[]> {
   const pedidoId = await abrirRascunho(ciclo, sessao);
   const lote = writeBatch(db);
   const resultado: ItemPedido[] = [];
-  for (const {
-    produto,
-    habilitacao,
-    fornecedorNome,
-    previsao,
-    decisao,
-  } of itens) {
-    const item = computarItem(
-      produto,
-      habilitacao,
-      fornecedorNome,
-      previsao,
-      decisao,
-      {
-        id: modelo.id,
-        nome: modelo.nome,
-      },
-    );
+  for (const { produto, habilitacao, fornecedorNome, previsao, decisao } of itens) {
+    const item = computarItem(produto, habilitacao, fornecedorNome, previsao, decisao, {
+      id: modelo.id,
+      nome: modelo.nome,
+    });
     const { id: _id, ...semId } = item;
-    lote.set(doc(db, "pedidos", pedidoId, "itens", produto.id), semId);
+    lote.set(doc(db, 'pedidos', pedidoId, 'itens', produto.id), semId);
     resultado.push(item);
   }
   await lote.commit();
@@ -528,20 +486,15 @@ export async function removerModelo(
 ): Promise<void> {
   const lote = writeBatch(db);
   for (const produtoId of produtoIds) {
-    lote.delete(doc(db, "pedidos", pedidoId, "itens", produtoId));
+    lote.delete(doc(db, 'pedidos', pedidoId, 'itens', produtoId));
   }
   await lote.commit();
 }
 
 // ─── Etapa 5: envio ──────────────────────────────────────────────
 
-export async function enviarPedido(
-  cicloId: string,
-): Promise<{ totais: Totais }> {
-  const enviar = httpsCallable<{ cicloId: string }, { totais: Totais }>(
-    functions,
-    "enviarPedido",
-  );
+export async function enviarPedido(cicloId: string): Promise<{ totais: Totais }> {
+  const enviar = httpsCallable<{ cicloId: string }, { totais: Totais }>(functions, 'enviarPedido');
   const { data } = await enviar({ cicloId });
   return data;
 }

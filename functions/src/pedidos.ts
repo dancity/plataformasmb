@@ -3,10 +3,11 @@ import type { AnoEscolarId, PrevisaoPorAno } from '../../dominio/anosEscolares';
 import { aplicarLicencas } from '../../dominio/anosEscolares';
 import { calcularItem } from '../../dominio/preco';
 import { anosEfetivos, resolverHabilitacao } from '../../dominio/habilitacao';
-import { bloqueioDe } from '../../dominio/vinculos';
+import { bloqueioDe, conflitosDoConjunto } from '../../dominio/vinculos';
 import type { EstadoContratacao } from '../../dominio/vinculos';
 import type {
   Ciclo,
+  Conjunto,
   EventoPedido,
   Fornecedor,
   ItemPedido,
@@ -134,9 +135,14 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   // A habilitação é nacional e vem dentro do produto: não há leitura de regras
   // por regional. A regional continua importando pro roteamento da aprovação,
   // não pro que a unidade pode contratar.
-  const [produtosSnap, fornecedoresSnap, itensSnap, unidadeDoc] = await Promise.all([
+  const [produtosSnap, conjuntosSnap, fornecedoresSnap, itensSnap, unidadeDoc] = await Promise.all([
     db
       .collection('produtos')
+      .where('cicloId', '==', cicloId)
+      .where('visibilidade', '==', 'publicado')
+      .get(),
+    db
+      .collection('conjuntos')
       .where('cicloId', '==', cicloId)
       .where('visibilidade', '==', 'publicado')
       .get(),
@@ -205,6 +211,8 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
   const lote = db.batch();
   const totais: TotaisPedido = { obrigatorio: 0, opcional: 0, total: 0 };
   const pendentes: string[] = [];
+  /** Anos que cada produto de fato ficou com — base pra checar os conjuntos. */
+  const anosPorProduto = new Map<string, Set<AnoEscolarId>>();
 
   for (const produto of produtos) {
     const hab = resolverHabilitacao(produto, previsao, unidadeSocial);
@@ -280,6 +288,8 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
     const alunosPorAno: Record<string, number> = {};
     for (const ano of anos) alunosPorAno[ano] = previsaoEfetiva[ano] ?? 0;
 
+    anosPorProduto.set(produto.id, new Set(anos));
+
     const ehObrigatorio = hab.obrigatorios.length > 0;
     const item: Omit<ItemPedido, 'id'> = {
       produtoId: produto.id,
@@ -310,6 +320,24 @@ export const enviarPedido = onCall(OPCOES_PADRAO, async (req) => {
       'failed-precondition',
       `Faltam decisões: ${pendentes.join(', ')}. Marque os anos escolares ou escolha "não contratar".`,
     );
+  }
+
+  // Conjunto de escolha única: um ano não pode ficar com duas trilhas. A
+  // tabela do gestor é de rádio e não deixa isso acontecer, então chegar
+  // aqui significa cliente desatualizado ou escrita direta — recusar é mais
+  // honesto que escolher uma e descartar a outra em silêncio, porque o preço
+  // das duas é diferente e a escolha é da unidade.
+  const nomeProduto = new Map(produtos.map((p) => [p.id, p.nome]));
+  for (const doc of conjuntosSnap.docs) {
+    const conjunto = { id: doc.id, ...doc.data() } as Conjunto;
+    for (const conflito of conflitosDoConjunto(conjunto, anosPorProduto)) {
+      const nomes = conflito.produtoIds.map((id) => nomeProduto.get(id) ?? id).join(' e ');
+      throw new HttpsError(
+        'failed-precondition',
+        `Em "${conjunto.nome}", o ano ${conflito.ano} ficou com ${nomes} ao mesmo tempo. ` +
+          'Abra o conjunto nas soluções adicionais e escolha uma trilha para esse ano.',
+      );
+    }
   }
 
   totais.total = totais.obrigatorio + totais.opcional;

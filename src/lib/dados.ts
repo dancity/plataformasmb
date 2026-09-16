@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import type {
   Ciclo,
+  Conjunto,
   EstadoCiclo,
   Fornecedor,
   ItemModelo,
@@ -438,6 +439,35 @@ export async function excluirTodosProdutos(cicloId: string): Promise<number> {
   }
 
   return produtos.length;
+}
+
+// ─── Conjuntos de escolha única ──────────────────────────────────
+
+export async function listarConjuntos(cicloId: string): Promise<Conjunto[]> {
+  const snap = await getDocs(
+    query(collection(db, 'conjuntos'), where('cicloId', '==', cicloId), orderBy('nome')),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Conjunto);
+}
+
+export type DadosConjunto = Omit<Conjunto, 'id' | 'criadoEm' | 'atualizadoEm'>;
+
+export async function criarConjunto(dados: DadosConjunto): Promise<string> {
+  const agora = new Date().toISOString();
+  const ref = await addDoc(collection(db, 'conjuntos'), {
+    ...dados,
+    criadoEm: agora,
+    atualizadoEm: agora,
+  });
+  return ref.id;
+}
+
+export async function atualizarConjunto(id: string, dados: DadosConjunto): Promise<void> {
+  await updateDoc(doc(db, 'conjuntos', id), { ...dados, atualizadoEm: new Date().toISOString() });
+}
+
+export async function excluirConjunto(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'conjuntos', id));
 }
 
 // ─── Modelos ─────────────────────────────────────────────────────

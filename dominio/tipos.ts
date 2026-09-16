@@ -237,6 +237,28 @@ export interface Modelo {
   atualizadoEm: DataISO;
 }
 
+/**
+ * Soluções que competem entre si: em cada ano escolar a unidade leva no
+ * máximo UMA delas. Pode levar todas, desde que em anos diferentes.
+ *
+ * Existe porque um mesmo fornecedor vende trilhas alternativas para a mesma
+ * faixa (a ZOOM, com Pensamento Computacional e Jornada Z). Tratar como duas
+ * soluções soltas faria o gestor marcar as duas no mesmo ano e só descobrir
+ * o problema quando o fornecedor recusasse — e faria a comparação de preço,
+ * que é a decisão real, acontecer em duas telas diferentes.
+ */
+export interface Conjunto {
+  id: string;
+  cicloId: string;
+  nome: string;
+  descricao: string;
+  /** Na ordem em que as colunas aparecem para o gestor. */
+  produtoIds: string[];
+  visibilidade: Visibilidade;
+  criadoEm: DataISO;
+  atualizadoEm: DataISO;
+}
+
 export type Obrigatoriedade = 'indisponivel' | 'opcional' | 'obrigatorio';
 
 /**
